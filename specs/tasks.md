@@ -1,0 +1,70 @@
+## Milestone v0 — “Local SD dump to CSV”
+- [x] **T0. Repo hygiene**
+  - [x] Cargo workspace with `crates/feeder_core` and `crates/app_gui`
+  - [x] CI task scripted (`scripts/ci.ps1`) — keep green
+  - [x] Spec checks scripted (`scripts/spec_check.ps1`) — scenarios referenced
+- [x] **T1. Editor integration (Zed + PowerShell)**
+  - [x] `.zed/tasks.json` with “Run CI”, “Check Scenarios”, “Show Progress”
+  - [x] ExecutionPolicy set or bypass in tasks (scripts run from Zed)
+  - [x] `scripts/progress.ps1` shows overall and per-section %
+  - [ ] (Optional) Keybindings for tasks in `keymap.json`
+
+## Core pipeline
+- [ ] **C0. Public API skeleton (feeder_core)**
+  - [ ] `scan_folder(path) -> Vec<ImageInfo>`
+  - [ ] `export_csv(rows, path)`
+  - [ ] Structs: `ImageInfo`, `Classification`, `Decision`
+- [ ] **C1. Image ingest**
+  - [ ] Select folder; list image files (jpg/jpeg/png) (Scenario 1)
+  - [ ] Empty-folder UX message (Scenario 1)
+  - [ ] Optional: recursive scan toggle
+- [ ] **C2. Stage A — “bird present” filter (MVP stub)**
+  - [ ] Heuristic placeholder to satisfy Scenario 2
+  - [ ] Interface to swap in YOLO later (feature flag `detector`)
+- [ ] **C3. Cropping**
+  - [ ] Pass-through now; square-pad to 224 later
+- [ ] **C4. Embeddings (CLIP via Candle)**
+  - [ ] Load weights from `/models`; batch embedding
+  - [ ] Deterministic preprocessing tests
+- [ ] **C5. k-NN search (HNSW)**
+  - [ ] Load reference index; query top-k; persist user adds
+- [ ] **C6. Open-set safety**
+  - [ ] Thresholds: `cos< T_min` or `(top1-top2)< Δ_min` → “Unknown”
+  - [ ] Configurable T_min & Δ_min; unit tests
+- [ ] **C7. CSV export**
+  - [ ] `file,present,species,confidence`
+  - [ ] Disable when no frames selected (Scenario 1)
+
+## GUI (egui)
+- [ ] **G1. Shell**
+  - [ ] Main window + folder picker + “Scan” button (Scenario 1)
+  - [ ] Grid of thumbnails (virtualized)
+- [ ] **G2. Filters & review**
+  - [ ] Toggle “Present only” (Scenario 2)
+  - [ ] “Review unsure” tray (Scenario 3)
+- [ ] **G3. Reference manager**
+  - [ ] Add to reference → embedding → user index
+  - [ ] Species picker (aliases)
+  - [ ] Rebuild/compact user index
+
+## Reference packs
+- [ ] **R1. Starter pack loader**
+  - [ ] Read `/reference/meta.json`; load `index.bin` + overlay `index_user.bin`
+- [ ] **R2. Import updates (manual)**
+  - [ ] Import `.zip` pack (embeddings + meta), keep user adds separate
+
+## Tests (mapped to scenarios)
+- [ ] **S1. Scenario 1: Empty Folder**
+  - [ ] e2e test: scan empty → “No images found”; CSV disabled
+- [ ] **S2. Scenario 2: Present filter hides empty frames**
+  - [ ] e2e test: mixed frames fixture → filter reduces count
+- [ ] **S3. Scenario 3: Unknown species abstention**
+  - [ ] unit: threshold logic; e2e: out-of-gallery image → “Unknown”
+
+## Packaging
+- [ ] **P1. Config & models**
+  - [ ] `/models` lookup + friendly missing-model error
+  - [ ] App config (toml/json): thresholds, batch size
+- [ ] **P2. Release**
+  - [ ] `cargo build --release`; smoke on Windows 11
+  - [ ] (Optional) self-update later via `self_update`

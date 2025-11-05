@@ -1,0 +1,15 @@
+[workspace]
+members = [
+    "crates/feeder_core",
+    "crates/app_gui"
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+
+[workspace.dependencies]
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+serde = { version = "1", features = ["derive"] }

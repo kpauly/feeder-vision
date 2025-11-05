@@ -1,0 +1,32 @@
+[package]
+name = "feeder_core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.100"
+bincode = "2.0.1"
+candle-core = "0.9.1"
+candle-transformers = "0.9.1"
+csv = "1.4.0"
+fast_image_resize = "5.3.0"
+hnsw_rs = "0.3.2"
+image = "0.25.8"
+ort = { version = "1.16.3", optional = true }
+rayon = "1.11.0"
+safetensors = "0.6.2"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+thiserror = "2.0.17"
+toml = "0.9.8"
+tracing = "0.1.41"
+tracing-subscriber = "0.3.20"
+walkdir = "2.5.0"
+
+[dev-dependencies]
+approx = "0.5.1"
+rstest = "0.26.1"
+tempfile = "3.23.0"
+
+[features]
+ort = ["dep:ort"]
