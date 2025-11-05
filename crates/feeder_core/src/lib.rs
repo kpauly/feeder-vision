@@ -50,7 +50,10 @@ pub fn export_csv(rows: &[ImageInfo], path: impl AsRef<Path>) -> Result<()> {
         // Compute species/confidence fields
         let (species, confidence): (Option<String>, Option<f32>) = if info.present {
             match &info.classification {
-                Some(Classification { decision, confidence }) => {
+                Some(Classification {
+                    decision,
+                    confidence,
+                }) => {
                     let s = match decision {
                         Decision::Unknown => Some("Unknown".to_string()),
                         Decision::Label(name) => Some(name.clone()),
@@ -92,16 +95,26 @@ mod tests {
         let path = tmp.path().to_path_buf();
 
         let rows = vec![
-            ImageInfo { file: PathBuf::from("a.jpg"), present: false, classification: None },
+            ImageInfo {
+                file: PathBuf::from("a.jpg"),
+                present: false,
+                classification: None,
+            },
             ImageInfo {
                 file: PathBuf::from("b.jpg"),
                 present: true,
-                classification: Some(Classification { decision: Decision::Unknown, confidence: 0.42 }),
+                classification: Some(Classification {
+                    decision: Decision::Unknown,
+                    confidence: 0.42,
+                }),
             },
             ImageInfo {
                 file: PathBuf::from("c.jpg"),
                 present: true,
-                classification: Some(Classification { decision: Decision::Label("Sparrow".into()), confidence: 0.91 }),
+                classification: Some(Classification {
+                    decision: Decision::Label("Sparrow".into()),
+                    confidence: 0.91,
+                }),
             },
         ];
 
@@ -110,7 +123,10 @@ mod tests {
         let mut rdr = csv::Reader::from_path(&path)?;
         // header check
         let headers = rdr.headers()?.clone();
-        assert_eq!(headers, ["file", "present", "species", "confidence"].as_ref());
+        assert_eq!(
+            headers,
+            ["file", "present", "species", "confidence"].as_ref()
+        );
 
         let mut recs = rdr.records();
         let r1 = recs.next().unwrap()?;
