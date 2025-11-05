@@ -123,9 +123,10 @@ mod tests {
         let mut rdr = csv::Reader::from_path(&path)?;
         // header check
         let headers = rdr.headers()?.clone();
+        let headers_vec: Vec<&str> = headers.iter().collect();
         assert_eq!(
-            headers,
-            ["file", "present", "species", "confidence"].as_ref()
+            headers_vec,
+            vec!["file", "present", "species", "confidence"]
         );
 
         let mut recs = rdr.records();
