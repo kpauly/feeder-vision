@@ -16,7 +16,7 @@
   - [x] Structs: `ImageInfo`, `Classification`, `Decision`
 - [ ] **C1. Image ingest**
   - [x] Select folder; list image files (jpg/jpeg/png) (Scenario 1)
-  - [ ] Empty-folder UX message (Scenario 1)
+  - [x] Empty-folder UX message (Scenario 1)
   - [x] Optional: recursive scan toggle
 - [ ] **C2. Stage A — “animal present” filter (MVP stub)**
   - [x] Background-difference detector (pHash/dHash + K=2) to satisfy Scenario 2
@@ -37,8 +37,8 @@
 
 ## GUI (egui)
 - [ ] **G1. Shell**
-  - [ ] Main window + folder picker + “Scan” button (Scenario 1)
-  - [ ] Grid of thumbnails (virtualized)
+  - [x] Main window + folder picker + “Scan” button (Scenario 1)
+  - [x] Grid of thumbnails (virtualized)
 - [ ] **G2. Filters & review**
   - [ ] Toggle “Present only” (Scenario 2)
   - [ ] “Review unsure” tray (Scenario 3)
