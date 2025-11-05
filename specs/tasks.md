@@ -10,10 +10,10 @@
   - [ ] (Optional) Keybindings for tasks in `keymap.json`
 
 ## Core pipeline
-- [ ] **C0. Public API skeleton (feeder_core)**
-  - [ ] `scan_folder(path) -> Vec<ImageInfo>`
-  - [ ] `export_csv(rows, path)`
-  - [ ] Structs: `ImageInfo`, `Classification`, `Decision`
+- [x] **C0. Public API skeleton (feeder_core)**
+  - [x] `scan_folder(path) -> Vec<ImageInfo>`
+  - [x] `export_csv(rows, path)`
+  - [x] Structs: `ImageInfo`, `Classification`, `Decision`
 - [ ] **C1. Image ingest**
   - [ ] Select folder; list image files (jpg/jpeg/png) (Scenario 1)
   - [ ] Empty-folder UX message (Scenario 1)
