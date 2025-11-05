@@ -1,4 +1,5 @@
 use anyhow::Result;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
@@ -132,6 +133,79 @@ pub fn export_csv(rows: &[ImageInfo], path: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
+/// Presence detector interface allowing different backends.
+pub trait PresenceDetector: Send + Sync {
+    fn detect_present(&self, path: &Path) -> Result<bool>;
+}
+
+/// A lightweight CPU heuristic detector using intensity variance.
+/// Fast and dependency-light; serves as MVP stub.
+#[derive(Debug, Clone, Copy)]
+pub struct HeuristicDetector {
+    /// Threshold on grayscale standard deviation [0-255].
+    pub stddev_threshold: f32,
+    /// Optional downscale size for speed; 0 means no downscale.
+    pub sample_size: u32,
+}
+
+impl Default for HeuristicDetector {
+    fn default() -> Self {
+        Self {
+            stddev_threshold: 10.0,
+            sample_size: 64,
+        }
+    }
+}
+
+impl PresenceDetector for HeuristicDetector {
+    fn detect_present(&self, path: &Path) -> Result<bool> {
+        let img = image::open(path)?;
+        let mut gray = img.to_luma8();
+        if self.sample_size > 0 {
+            gray = image::imageops::thumbnail(&gray, self.sample_size, self.sample_size);
+        }
+        let mut sum = 0f64;
+        let mut sum2 = 0f64;
+        let n = (gray.width() as usize) * (gray.height() as usize);
+        for p in gray.pixels() {
+            let v = p[0] as f64;
+            sum += v;
+            sum2 += v * v;
+        }
+        let mean = sum / n as f64;
+        let var = (sum2 / n as f64) - (mean * mean);
+        let stddev = var.max(0.0).sqrt() as f32;
+        Ok(stddev >= self.stddev_threshold)
+    }
+}
+
+/// Apply presence detection to the provided image infos in-place.
+pub fn apply_presence<D: PresenceDetector + ?Sized>(rows: &mut [ImageInfo], detector: &D) {
+    rows.par_iter_mut()
+        .for_each(|info| match detector.detect_present(&info.file) {
+            Ok(p) => info.present = p,
+            Err(e) => {
+                tracing::warn!(
+                    "presence detection failed for {}: {}",
+                    info.file.display(),
+                    e
+                );
+                info.present = false;
+            }
+        });
+}
+
+/// Convenience: scan a folder and immediately run detection.
+pub fn scan_folder_detect(
+    path: impl AsRef<Path>,
+    opts: ScanOptions,
+    detector: &dyn PresenceDetector,
+) -> Result<Vec<ImageInfo>> {
+    let mut rows = scan_folder_with(path, opts)?;
+    apply_presence(&mut rows, detector);
+    Ok(rows)
+}
+
 fn is_supported_image(path: &Path) -> bool {
     match path.extension().and_then(|s| s.to_str()) {
         Some(ext) => {
@@ -258,6 +332,32 @@ mod tests {
             .collect();
         files.sort();
         assert_eq!(files, vec!["a.jpg", "b.PNG"]);
+        Ok(())
+    }
+
+    #[test]
+    fn heuristic_detector_blank_vs_shape() -> Result<()> {
+        let dir = tempdir()?;
+        // Blank white image
+        let blank_path = dir.path().join("blank.png");
+        let blank = image::GrayImage::from_pixel(64, 64, image::Luma([255]));
+        blank.save(&blank_path)?;
+
+        // Image with a black rectangle
+        let rect_path = dir.path().join("rect.png");
+        let mut rect = image::GrayImage::from_pixel(64, 64, image::Luma([255]));
+        for y in 16..48 {
+            for x in 16..48 {
+                rect.put_pixel(x, y, image::Luma([0]));
+            }
+        }
+        rect.save(&rect_path)?;
+
+        let det = HeuristicDetector::default();
+        let p_blank = det.detect_present(&blank_path)?;
+        let p_rect = det.detect_present(&rect_path)?;
+        assert!(!p_blank);
+        assert!(p_rect);
         Ok(())
     }
 }

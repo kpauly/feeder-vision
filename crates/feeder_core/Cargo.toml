@@ -30,3 +30,5 @@ tempfile = "3.23.0"
 
 [features]
 ort = ["dep:ort"]
+# Placeholder feature to enable a YOLO-based detector in the future.
+detector = []
