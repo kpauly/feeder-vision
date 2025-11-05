@@ -15,9 +15,9 @@
   - [x] `export_csv(rows, path)`
   - [x] Structs: `ImageInfo`, `Classification`, `Decision`
 - [ ] **C1. Image ingest**
-  - [ ] Select folder; list image files (jpg/jpeg/png) (Scenario 1)
+  - [x] Select folder; list image files (jpg/jpeg/png) (Scenario 1)
   - [ ] Empty-folder UX message (Scenario 1)
-  - [ ] Optional: recursive scan toggle
+  - [x] Optional: recursive scan toggle
 - [ ] **C2. Stage A — “bird present” filter (MVP stub)**
   - [ ] Heuristic placeholder to satisfy Scenario 2
   - [ ] Interface to swap in YOLO later (feature flag `detector`)
