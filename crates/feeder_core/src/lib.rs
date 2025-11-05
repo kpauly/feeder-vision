@@ -135,6 +135,10 @@ pub fn export_csv(rows: &[ImageInfo], path: impl AsRef<Path>) -> Result<()> {
 
 /// Presence detector interface allowing different backends.
 pub trait PresenceDetector: Send + Sync {
+    /// Optional prepare step for background-aware detectors.
+    fn prepare(&mut self, _paths: &[PathBuf]) -> Result<()> {
+        Ok(())
+    }
     fn detect_present(&self, path: &Path) -> Result<bool>;
 }
 
@@ -179,8 +183,188 @@ impl PresenceDetector for HeuristicDetector {
     }
 }
 
+/// Background-difference detector using 64-bit dHash and K=2 centroids.
+#[derive(Debug, Clone)]
+pub struct BgDiffDetector {
+    /// Distance above mean by k*std to flag presence.
+    pub k: f32,
+    // learned centroids and stats; set in prepare()
+    c0: u64,
+    c1: u64,
+    mean0: f32,
+    std0: f32,
+    mean1: f32,
+    std1: f32,
+}
+
+impl Default for BgDiffDetector {
+    fn default() -> Self {
+        Self {
+            k: 2.5,
+            c0: 0,
+            c1: !0u64,
+            mean0: 0.0,
+            std0: 1.0,
+            mean1: 0.0,
+            std1: 1.0,
+        }
+    }
+}
+
+impl PresenceDetector for BgDiffDetector {
+    fn prepare(&mut self, paths: &[PathBuf]) -> Result<()> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+        let hashes: Vec<u64> = paths
+            .par_iter()
+            .map(|p| dhash_path(p))
+            .collect::<Result<_>>()?;
+
+        // Initialize centroids: c0 = majority bitstring, c1 = farthest from c0
+        let c0 = bitwise_majority(&hashes);
+        let c1 = farthest_from(c0, &hashes).unwrap_or(!c0);
+
+        let (c0, c1, assign) = k2_hamming_centroids(&hashes, c0, c1, 5);
+        let (mean0, std0) = cluster_stats(&hashes, c0, &assign, 0);
+        let (mean1, std1) = cluster_stats(&hashes, c1, &assign, 1);
+
+        self.c0 = c0;
+        self.c1 = c1;
+        self.mean0 = mean0;
+        self.std0 = if std0 <= 1e-3 { 1.0 } else { std0 };
+        self.mean1 = mean1;
+        self.std1 = if std1 <= 1e-3 { 1.0 } else { std1 };
+        Ok(())
+    }
+
+    fn detect_present(&self, path: &Path) -> Result<bool> {
+        let h = dhash_path(path)?;
+        let d0 = hamming(self.c0, h) as f32;
+        let d1 = hamming(self.c1, h) as f32;
+        if d0 <= d1 {
+            Ok(d0 > self.mean0 + self.k * self.std0)
+        } else {
+            Ok(d1 > self.mean1 + self.k * self.std1)
+        }
+    }
+}
+
+fn dhash_path(p: &Path) -> Result<u64> {
+    let img = image::open(p)?;
+    Ok(dhash_gray(&img.to_luma8()))
+}
+
+// 64-bit horizontal dHash: resize to 9x8, compare adjacent pixels.
+fn dhash_gray(gray: &image::GrayImage) -> u64 {
+    let small = image::imageops::resize(gray, 9, 8, image::imageops::FilterType::Nearest);
+    let mut bits: u64 = 0;
+    let mut idx = 0;
+    for y in 0..8 {
+        for x in 0..8 {
+            let a = small.get_pixel(x, y)[0];
+            let b = small.get_pixel(x + 1, y)[0];
+            if a > b {
+                bits |= 1u64 << idx;
+            }
+            idx += 1;
+        }
+    }
+    bits
+}
+
+#[inline]
+fn hamming(a: u64, b: u64) -> u32 {
+    (a ^ b).count_ones()
+}
+
+fn bitwise_majority(vals: &[u64]) -> u64 {
+    let n = vals.len() as i64;
+    let mut acc = [0i64; 64];
+    for &v in vals {
+        for (i, slot) in acc.iter_mut().enumerate() {
+            if (v >> i) & 1 == 1 {
+                *slot += 1;
+            }
+        }
+    }
+    let mut out = 0u64;
+    for (i, &count) in acc.iter().enumerate() {
+        if count * 2 >= n {
+            out |= 1u64 << i;
+        }
+    }
+    out
+}
+
+fn farthest_from(center: u64, vals: &[u64]) -> Option<u64> {
+    vals.iter().copied().max_by_key(|&v| hamming(center, v))
+}
+
+fn k2_hamming_centroids(
+    vals: &[u64],
+    mut c0: u64,
+    mut c1: u64,
+    iters: usize,
+) -> (u64, u64, Vec<u8>) {
+    let n = vals.len();
+    let mut assign = vec![0u8; n];
+    for _ in 0..iters {
+        // assign
+        for (i, &v) in vals.iter().enumerate() {
+            let d0 = hamming(v, c0);
+            let d1 = hamming(v, c1);
+            assign[i] = if d0 <= d1 { 0 } else { 1 };
+        }
+        // recompute centroids by bitwise majority per cluster
+        let mut cluster0 = Vec::new();
+        let mut cluster1 = Vec::new();
+        cluster0.reserve(n);
+        cluster1.reserve(n);
+        for (i, &v) in vals.iter().enumerate() {
+            if assign[i] == 0 {
+                cluster0.push(v);
+            } else {
+                cluster1.push(v);
+            }
+        }
+        if !cluster0.is_empty() {
+            c0 = bitwise_majority(&cluster0);
+        }
+        if !cluster1.is_empty() {
+            c1 = bitwise_majority(&cluster1);
+        }
+    }
+    (c0, c1, assign)
+}
+
+fn cluster_stats(vals: &[u64], c: u64, assign: &[u8], which: u8) -> (f32, f32) {
+    let mut sum = 0f32;
+    let mut sum2 = 0f32;
+    let mut cnt = 0f32;
+    for (i, &v) in vals.iter().enumerate() {
+        if assign[i] == which {
+            let d = hamming(c, v) as f32;
+            sum += d;
+            sum2 += d * d;
+            cnt += 1.0;
+        }
+    }
+    if cnt < 1.0 {
+        return (0.0, 1.0);
+    }
+    let mean = sum / cnt;
+    let var = (sum2 / cnt) - mean * mean;
+    (mean, var.max(0.0).sqrt())
+}
+
 /// Apply presence detection to the provided image infos in-place.
-pub fn apply_presence<D: PresenceDetector + ?Sized>(rows: &mut [ImageInfo], detector: &D) {
+pub fn apply_presence<D: PresenceDetector + ?Sized>(
+    rows: &mut [ImageInfo],
+    detector: &mut D,
+) -> Result<()> {
+    let files: Vec<PathBuf> = rows.iter().map(|r| r.file.clone()).collect();
+    detector.prepare(&files)?;
     rows.par_iter_mut()
         .for_each(|info| match detector.detect_present(&info.file) {
             Ok(p) => info.present = p,
@@ -193,16 +377,17 @@ pub fn apply_presence<D: PresenceDetector + ?Sized>(rows: &mut [ImageInfo], dete
                 info.present = false;
             }
         });
+    Ok(())
 }
 
 /// Convenience: scan a folder and immediately run detection.
 pub fn scan_folder_detect(
     path: impl AsRef<Path>,
     opts: ScanOptions,
-    detector: &dyn PresenceDetector,
+    detector: &mut dyn PresenceDetector,
 ) -> Result<Vec<ImageInfo>> {
     let mut rows = scan_folder_with(path, opts)?;
-    apply_presence(&mut rows, detector);
+    apply_presence(&mut rows, detector)?;
     Ok(rows)
 }
 
