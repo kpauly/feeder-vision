@@ -32,18 +32,18 @@
   - [ ] Thresholds: `cos< T_min` or `(top1-top2)< Δ_min` → “Unknown”
   - [ ] Configurable T_min & Δ_min; unit tests
 - [ ] **C7. CSV export**
-  - [ ] `file,present,species,confidence`
-  - [ ] Disable when no frames selected (Scenario 1)
+  - [x] `file,present,species,confidence`
+  - [x] Disable when no frames selected (Scenario 1)
 
 ## GUI (egui)
 - [ ] **G1. Shell**
   - [x] Main window + folder picker + “Scan” button (Scenario 1)
   - [x] Grid of thumbnails (virtualized)
-  - [ ] Pre-scan summary count on folder select (e.g., “Afbeeldingen in map: N”)
-  - [ ] Background scanning worker + progress bar (non-blocking UI)
+  - [x] Pre-scan summary count on folder select (e.g., “Afbeeldingen in map: N”)
+  - [x] Background scanning worker + progress bar (non-blocking UI)
 - [ ] **G2. Filters & review**
-  - [ ] Default view shows only “Aanwezig” (present)
-  - [ ] Toggle to switch “Aanwezig | Leeg” (Scenario 2 / 2b)
+  - [x] Default view shows only “Aanwezig” (present)
+  - [x] Toggle to switch “Aanwezig | Leeg” (Scenario 2 / 2b)
   - [ ] “Review unsure” tray (Scenario 3)
 - [ ] **G3. Reference manager**
   - [ ] Add to reference → embedding → user index
