@@ -12,6 +12,7 @@ csv = "1.4.0"
 fast_image_resize = "5.3.0"
 hnsw_rs = "0.3.2"
 image = "0.25.8"
+jpeg-decoder = { version = "0.3", default-features = false }
 ort = { version = "1.16.3", optional = true }
 rayon = "1.11.0"
 safetensors = "0.6.2"

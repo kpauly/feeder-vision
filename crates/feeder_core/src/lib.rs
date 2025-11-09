@@ -1,7 +1,16 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
+use jpeg_decoder::{
+    ColorTransform as JpegColorTransform, Decoder as FastJpegDecoder,
+    PixelFormat as JpegPixelFormat,
+};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::fs::File;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc;
+use std::thread;
 use walkdir::WalkDir;
 
 /// Classification decision for an image/crop.
@@ -211,23 +220,26 @@ impl Default for BgDiffDetector {
     }
 }
 
-impl PresenceDetector for BgDiffDetector {
-    fn prepare(&mut self, paths: &[PathBuf]) -> Result<()> {
-        if paths.is_empty() {
-            return Ok(());
+impl BgDiffDetector {
+    /// Build the internal background model from already computed dHashes.
+    pub fn prepare_hashes(&mut self, hashes: &[u64]) {
+        if hashes.is_empty() {
+            self.c0 = 0;
+            self.c1 = !0u64;
+            self.mean0 = 0.0;
+            self.std0 = 1.0;
+            self.mean1 = 0.0;
+            self.std1 = 1.0;
+            return;
         }
-        let hashes: Vec<u64> = paths
-            .par_iter()
-            .map(|p| dhash_path(p))
-            .collect::<Result<_>>()?;
 
         // Initialize centroids: c0 = majority bitstring, c1 = farthest from c0
-        let c0 = bitwise_majority(&hashes);
-        let c1 = farthest_from(c0, &hashes).unwrap_or(!c0);
+        let c0 = bitwise_majority(hashes);
+        let c1 = farthest_from(c0, hashes).unwrap_or(!c0);
 
-        let (c0, c1, assign) = k2_hamming_centroids(&hashes, c0, c1, 5);
-        let (mean0, std0) = cluster_stats(&hashes, c0, &assign, 0);
-        let (mean1, std1) = cluster_stats(&hashes, c1, &assign, 1);
+        let (c0, c1, assign) = k2_hamming_centroids(hashes, c0, c1, 5);
+        let (mean0, std0) = cluster_stats(hashes, c0, &assign, 0);
+        let (mean1, std1) = cluster_stats(hashes, c1, &assign, 1);
 
         self.c0 = c0;
         self.c1 = c1;
@@ -235,24 +247,78 @@ impl PresenceDetector for BgDiffDetector {
         self.std0 = if std0 <= 1e-3 { 1.0 } else { std0 };
         self.mean1 = mean1;
         self.std1 = if std1 <= 1e-3 { 1.0 } else { std1 };
+    }
+
+    /// Evaluate presence directly from a 64-bit hash without re-reading the image.
+    pub fn detect_hash(&self, hash: u64) -> bool {
+        let d0 = hamming(self.c0, hash) as f32;
+        let d1 = hamming(self.c1, hash) as f32;
+        if d0 <= d1 {
+            d0 > self.mean0 + self.k * self.std0
+        } else {
+            d1 > self.mean1 + self.k * self.std1
+        }
+    }
+}
+
+impl PresenceDetector for BgDiffDetector {
+    fn prepare(&mut self, paths: &[PathBuf]) -> Result<()> {
+        if paths.is_empty() {
+            self.prepare_hashes(&[]);
+            return Ok(());
+        }
+        let hashes: Vec<u64> = paths
+            .par_iter()
+            .map(|p| dhash_path(p))
+            .collect::<Result<_>>()?;
+
+        self.prepare_hashes(&hashes);
         Ok(())
     }
 
     fn detect_present(&self, path: &Path) -> Result<bool> {
         let h = dhash_path(path)?;
-        let d0 = hamming(self.c0, h) as f32;
-        let d1 = hamming(self.c1, h) as f32;
-        if d0 <= d1 {
-            Ok(d0 > self.mean0 + self.k * self.std0)
-        } else {
-            Ok(d1 > self.mean1 + self.k * self.std1)
-        }
+        Ok(self.detect_hash(h))
     }
 }
 
-fn dhash_path(p: &Path) -> Result<u64> {
+/// Compute a 64-bit horizontal dHash for the image at `p`.
+pub fn dhash_path(p: &Path) -> Result<u64> {
+    if is_jpeg_ext(p) {
+        match dhash_jpeg_downscaled(p) {
+            Ok(hash) => return Ok(hash),
+            Err(err) => {
+                tracing::debug!("jpeg fast-path hashing failed for {}: {err}", p.display());
+            }
+        }
+    }
+    dhash_via_image_crate(p)
+}
+
+fn dhash_via_image_crate(p: &Path) -> Result<u64> {
     let img = image::open(p)?;
     Ok(dhash_gray(&img.to_luma8()))
+}
+
+fn dhash_jpeg_downscaled(p: &Path) -> Result<u64> {
+    let file = File::open(p)?;
+    let reader = BufReader::new(file);
+    let mut decoder = FastJpegDecoder::new(reader);
+    decoder.set_color_transform(JpegColorTransform::Grayscale);
+    // Request the smallest IDCT size that still exceeds the dHash target (9x8).
+    let _ = decoder.scale(9, 8)?;
+    let pixels = decoder.decode()?;
+    let info = decoder
+        .info()
+        .ok_or_else(|| anyhow!("jpeg decoder missing image info"))?;
+    if info.pixel_format != JpegPixelFormat::L8 {
+        anyhow::bail!("unsupported jpeg pixel format {:?}", info.pixel_format);
+    }
+    let width = u32::from(info.width);
+    let height = u32::from(info.height);
+    let gray = image::GrayImage::from_raw(width, height, pixels)
+        .ok_or_else(|| anyhow!("jpeg buffer size mismatch"))?;
+    Ok(dhash_gray(&gray))
 }
 
 // 64-bit horizontal dHash: resize to 9x8, compare adjacent pixels.
@@ -380,6 +446,108 @@ pub fn apply_presence<D: PresenceDetector + ?Sized>(
     Ok(())
 }
 
+/// Stage identifiers for progress reporting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PresenceStage {
+    Hashing,
+    Scoring,
+}
+
+/// Progress payload emitted while running Stage A.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PresenceProgress {
+    pub stage: PresenceStage,
+    pub completed: usize,
+    pub total: usize,
+}
+
+/// Specialized Stage A implementation for [`BgDiffDetector`] that reports progress and hashes in parallel.
+pub fn apply_bgdiff_presence_with_progress<P>(
+    rows: &mut [ImageInfo],
+    detector: &mut BgDiffDetector,
+    progress: P,
+) -> Result<()>
+where
+    P: FnMut(PresenceProgress) + Send + 'static,
+{
+    let total = rows.len();
+    let (progress_tx, progress_rx) = mpsc::channel::<PresenceProgress>();
+    let mut progress = progress;
+    let progress_thread = thread::spawn(move || {
+        for evt in progress_rx {
+            progress(evt);
+        }
+    });
+
+    let main_tx = progress_tx.clone();
+    let _ = main_tx.send(PresenceProgress {
+        stage: PresenceStage::Hashing,
+        completed: 0,
+        total,
+    });
+    if total == 0 {
+        detector.prepare_hashes(&[]);
+        let _ = main_tx.send(PresenceProgress {
+            stage: PresenceStage::Scoring,
+            completed: 0,
+            total,
+        });
+        drop(main_tx);
+        drop(progress_tx);
+        let _ = progress_thread.join();
+        return Ok(());
+    }
+
+    let hash_counter = AtomicUsize::new(0);
+    let hashes: Vec<Option<u64>> = rows
+        .par_iter()
+        .map_with(progress_tx.clone(), |tx, info| {
+            let hash = dhash_path(&info.file).ok();
+            let done = hash_counter.fetch_add(1, Ordering::Relaxed) + 1;
+            let _ = tx.send(PresenceProgress {
+                stage: PresenceStage::Hashing,
+                completed: done.min(total),
+                total,
+            });
+            hash
+        })
+        .collect();
+
+    let valid_hashes: Vec<u64> = hashes.iter().copied().flatten().collect();
+    detector.prepare_hashes(&valid_hashes);
+
+    let _ = progress_tx.send(PresenceProgress {
+        stage: PresenceStage::Scoring,
+        completed: 0,
+        total,
+    });
+    let classify_counter = AtomicUsize::new(0);
+    rows.par_iter_mut()
+        .zip(hashes.into_par_iter())
+        .for_each_with(progress_tx.clone(), |tx, (info, maybe_hash)| {
+            info.present = maybe_hash
+                .map(|hash| detector.detect_hash(hash))
+                .unwrap_or(false);
+            let done = classify_counter.fetch_add(1, Ordering::Relaxed) + 1;
+            let _ = tx.send(PresenceProgress {
+                stage: PresenceStage::Scoring,
+                completed: done.min(total),
+                total,
+            });
+        });
+
+    // Close the channel and drain remaining progress events on the listener thread.
+    drop(main_tx);
+    drop(progress_tx);
+    let _ = progress_thread.join();
+    Ok(())
+}
+
+/// Convenience wrapper that ignores progress updates.
+pub fn apply_bgdiff_presence(rows: &mut [ImageInfo], detector: &mut BgDiffDetector) -> Result<()> {
+    apply_bgdiff_presence_with_progress(rows, detector, |_| {})
+}
+
 /// Convenience: scan a folder and immediately run detection.
 pub fn scan_folder_detect(
     path: impl AsRef<Path>,
@@ -397,6 +565,13 @@ fn is_supported_image(path: &Path) -> bool {
             let ext = ext.to_ascii_lowercase();
             matches!(ext.as_str(), "jpg" | "jpeg" | "png")
         }
+        None => false,
+    }
+}
+
+fn is_jpeg_ext(path: &Path) -> bool {
+    match path.extension().and_then(|s| s.to_str()) {
+        Some(ext) => matches!(ext.to_ascii_lowercase().as_str(), "jpg" | "jpeg"),
         None => false,
     }
 }

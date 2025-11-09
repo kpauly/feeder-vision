@@ -21,6 +21,7 @@
 - [ ] **C2. Stage A — “animal present” filter (MVP stub)**
   - [x] Background-difference detector (pHash/dHash + K=2) to satisfy Scenario 2
   - [x] Interface to swap in YOLO later (feature flag `detector`)
+  - [ ] Field validation on feeder SD dumps (current heuristic marks everything `leeg`; needs upgraded detector, e.g. YOLO/motion)
 - [ ] **C3. Cropping**
   - [ ] Pass-through now; square-pad to 224 later
 - [ ] **C4. Embeddings (CLIP via Candle)**
@@ -41,6 +42,7 @@
   - [x] Grid of thumbnails (virtualized)
   - [x] Pre-scan summary count on folder select (e.g., “Afbeeldingen in map: N”)
   - [x] Background scanning worker + progress bar (non-blocking UI)
+  - [ ] Progress bar should reach 100% + keep requesting repaint after scans so thumbnails load without manual interaction
 - [ ] **G2. Filters & review**
   - [x] Default view shows only “Aanwezig” (present)
   - [x] Toggle to switch “Aanwezig | Leeg” (Scenario 2 / 2b)
