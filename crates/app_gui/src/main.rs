@@ -1,9 +1,5 @@
 use eframe::{App, Frame, NativeOptions, egui};
-use feeder_core::BgDiffDetector;
-use feeder_core::{
-    ImageInfo, PresenceProgress, PresenceStage, ScanOptions, apply_bgdiff_presence_with_progress,
-    export_csv, scan_folder_with,
-};
+use feeder_core::{ImageInfo, ScanOptions, export_csv, scan_folder_with};
 use rfd::FileDialog;
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -174,7 +170,6 @@ impl App for UiApp {
                     self.rx = Some(rx);
                     thread::spawn(move || {
                         let t0 = Instant::now();
-                        // 1) list files
                         let mut rows =
                             match scan_folder_with(&dir, ScanOptions { recursive: false }) {
                                 Ok(r) => r,
@@ -188,29 +183,12 @@ impl App for UiApp {
                         let total = rows.len();
                         let _ = tx.send(ScanMsg::Progress(0, total));
 
-                        // 2) run Stage A with core progress reporting
-                        let mut det = BgDiffDetector::default();
-                        let progress_den = total.max(1) * 2;
-                        let tx_progress = tx.clone();
-                        let progress_cb = move |evt: PresenceProgress| {
-                            let work_done = match evt.stage {
-                                PresenceStage::Hashing => evt.completed,
-                                PresenceStage::Scoring => total + evt.completed,
-                            };
-                            let scaled = if total == 0 {
-                                0
-                            } else {
-                                let clamped = work_done.min(progress_den);
-                                ((clamped as u128) * (total as u128) / (progress_den as u128))
-                                    as usize
-                            };
-                            let _ = tx_progress.send(ScanMsg::Progress(scaled.min(total), total));
-                        };
-                        if let Err(e) =
-                            apply_bgdiff_presence_with_progress(&mut rows, &mut det, progress_cb)
-                        {
-                            tracing::warn!("Stage A failed: {}", e);
+                        // Placeholder: direct classification will populate these soon.
+                        for info in rows.iter_mut() {
+                            info.present = false;
+                            info.classification = None;
                         }
+
                         let _ = tx.send(ScanMsg::Progress(total, total));
                         let elapsed_ms = t0.elapsed().as_millis();
                         let _ = tx.send(ScanMsg::Done(rows, elapsed_ms));
