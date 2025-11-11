@@ -1,5 +1,7 @@
 use eframe::{App, Frame, NativeOptions, egui};
-use feeder_core::{ImageInfo, ScanOptions, export_csv, scan_folder_with};
+use feeder_core::{
+    ClassifierConfig, EfficientNetOrt, ImageInfo, ScanOptions, export_csv, scan_folder_with,
+};
 use rfd::FileDialog;
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -53,6 +55,7 @@ const MAX_THUMBS: usize = 256;
 enum ScanMsg {
     Progress(usize, usize),     // scanned, total
     Done(Vec<ImageInfo>, u128), // rows, elapsed_ms
+    Error(String),
 }
 
 impl UiApp {
@@ -115,6 +118,13 @@ impl App for UiApp {
                         keep = false;
                         break;
                     }
+                    ScanMsg::Error(message) => {
+                        self.scan_in_progress = false;
+                        self.has_scanned = false;
+                        self.status = message;
+                        keep = false;
+                        break;
+                    }
                 }
             }
             if keep {
@@ -174,19 +184,31 @@ impl App for UiApp {
                             match scan_folder_with(&dir, ScanOptions { recursive: false }) {
                                 Ok(r) => r,
                                 Err(e) => {
-                                    let _ = tx.send(ScanMsg::Progress(0, 0));
-                                    let _ = tx.send(ScanMsg::Done(Vec::new(), 0));
+                                    let _ = tx
+                                        .send(ScanMsg::Error(format!("Map scannen mislukt: {e}")));
                                     tracing::warn!("scan_folder_with failed: {}", e);
                                     return;
                                 }
                             };
                         let total = rows.len();
                         let _ = tx.send(ScanMsg::Progress(0, total));
-
-                        // Placeholder: direct classification will populate these soon.
-                        for info in rows.iter_mut() {
-                            info.present = false;
-                            info.classification = None;
+                        let cfg = ClassifierConfig::default();
+                        let classifier = match EfficientNetOrt::new(&cfg) {
+                            Ok(c) => c,
+                            Err(e) => {
+                                let _ =
+                                    tx.send(ScanMsg::Error(format!("Model laden mislukt: {e}")));
+                                return;
+                            }
+                        };
+                        let tx_progress = tx.clone();
+                        if let Err(e) =
+                            classifier.classify_with_progress(&mut rows, |done, total| {
+                                let _ = tx_progress.send(ScanMsg::Progress(done.min(total), total));
+                            })
+                        {
+                            let _ = tx.send(ScanMsg::Error(format!("Classificatie mislukt: {e}")));
+                            return;
                         }
 
                         let _ = tx.send(ScanMsg::Progress(total, total));

@@ -1,6 +1,15 @@
-use anyhow::Result;
+use anyhow::{Context, Result, anyhow};
+use image::{DynamicImage, RgbaImage, imageops::FilterType};
+use ndarray::{Array4, CowArray};
+use once_cell::sync::Lazy;
+use ort::{
+    GraphOptimizationLevel, SessionBuilder, environment::Environment, session::Session,
+    tensor::OrtOwnedTensor, value::Value,
+};
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use walkdir::WalkDir;
 
 /// Classification decision for an image/crop.
@@ -134,6 +143,202 @@ fn is_supported_image(path: &Path) -> bool {
         }
         None => false,
     }
+}
+
+static ORT_ENV: Lazy<Arc<Environment>> = Lazy::new(|| {
+    Environment::builder()
+        .with_name("feeder-vision")
+        .build()
+        .expect("failed to initialize ONNX Runtime environment")
+        .into_arc()
+});
+
+/// Configuration for the ONNX-based EfficientNet classifier.
+#[derive(Debug, Clone)]
+pub struct ClassifierConfig {
+    pub model_path: PathBuf,
+    pub labels_path: PathBuf,
+    pub input_size: u32,
+    pub presence_threshold: f32,
+    pub mean: [f32; 3],
+    pub std: [f32; 3],
+}
+
+impl Default for ClassifierConfig {
+    fn default() -> Self {
+        Self {
+            model_path: PathBuf::from("models/efficientnet_b0.onnx"),
+            labels_path: PathBuf::from("models/labels.txt"),
+            input_size: 512,
+            presence_threshold: 0.5,
+            mean: [0.485, 0.456, 0.406],
+            std: [0.229, 0.224, 0.225],
+        }
+    }
+}
+
+/// EfficientNet classifier backed by ONNX Runtime.
+pub struct EfficientNetOrt {
+    session: Session,
+    labels: Vec<String>,
+    input_size: u32,
+    presence_threshold: f32,
+    mean: [f32; 3],
+    std: [f32; 3],
+}
+
+impl EfficientNetOrt {
+    pub fn new(cfg: &ClassifierConfig) -> Result<Self> {
+        if !cfg.model_path.exists() {
+            anyhow::bail!(
+                "Modelbestand ontbreekt: {}",
+                cfg.model_path.to_string_lossy()
+            );
+        }
+        if !cfg.labels_path.exists() {
+            anyhow::bail!(
+                "Labels-bestand ontbreekt: {}",
+                cfg.labels_path.to_string_lossy()
+            );
+        }
+        let env = ORT_ENV.clone();
+        let session = SessionBuilder::new(&env)?
+            .with_optimization_level(GraphOptimizationLevel::Level1)?
+            .with_model_from_file(&cfg.model_path)?;
+
+        let labels_raw = fs::read_to_string(&cfg.labels_path).context("labels niet te lezen")?;
+        let mut labels: Vec<String> = labels_raw
+            .lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty())
+            .map(|l| l.to_string())
+            .collect();
+        if labels.is_empty() {
+            anyhow::bail!("labels-bestand bevat geen labels");
+        }
+        // ensure stable ordering
+        labels.dedup();
+
+        Ok(Self {
+            session,
+            labels,
+            input_size: cfg.input_size,
+            presence_threshold: cfg.presence_threshold,
+            mean: cfg.mean,
+            std: cfg.std,
+        })
+    }
+
+    pub fn classify_with_progress<F>(&self, rows: &mut [ImageInfo], mut progress: F) -> Result<()>
+    where
+        F: FnMut(usize, usize),
+    {
+        let total = rows.len();
+        if total == 0 {
+            return Ok(());
+        }
+        for (idx, info) in rows.iter_mut().enumerate() {
+            match self.classify_single(&info.file) {
+                Ok(result) => {
+                    info.present = result.present;
+                    info.classification = result.classification;
+                }
+                Err(err) => {
+                    tracing::warn!("Classifier fout voor {}: {err}", info.file.display());
+                    info.present = false;
+                    info.classification = None;
+                }
+            }
+            progress(idx + 1, total);
+        }
+        Ok(())
+    }
+
+    fn classify_single(&self, path: &Path) -> Result<ClassificationResult> {
+        let tensor = self.prepare_input(path)?;
+        let input_array = tensor.into_dyn();
+        let cow = CowArray::from(input_array.view());
+        let input = Value::from_array(self.session.allocator(), &cow)
+            .map_err(|e| anyhow!("kon inputtensor niet bouwen: {e}"))?;
+        let outputs: Vec<Value> = self.session.run(vec![input])?;
+        if outputs.is_empty() {
+            anyhow::bail!("model gaf geen output");
+        }
+        let logits: OrtOwnedTensor<f32, _> = outputs[0].try_extract()?;
+        let view = logits.view();
+        let scores: Vec<f32> = view.iter().cloned().collect();
+        if scores.is_empty() {
+            anyhow::bail!("lege logits");
+        }
+        let probs = softmax(&scores);
+        let (best_idx, &best_prob) = probs
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
+            .unwrap();
+        let label = self
+            .labels
+            .get(best_idx)
+            .cloned()
+            .unwrap_or_else(|| format!("class_{best_idx}"));
+        let present = best_prob >= self.presence_threshold;
+        let classification = if present {
+            Some(Classification {
+                decision: Decision::Label(label),
+                confidence: best_prob,
+            })
+        } else {
+            Some(Classification {
+                decision: Decision::Unknown,
+                confidence: best_prob,
+            })
+        };
+        Ok(ClassificationResult {
+            present,
+            classification,
+        })
+    }
+
+    fn prepare_input(&self, path: &Path) -> Result<Array4<f32>> {
+        let img = image::open(path)
+            .with_context(|| format!("kan afbeelding niet openen: {}", path.display()))?;
+        let resized = resize_to_square(img, self.input_size);
+        let mut array =
+            Array4::<f32>::zeros((1, 3, self.input_size as usize, self.input_size as usize));
+        for (x, y, pixel) in resized.enumerate_pixels() {
+            let [r, g, b, _] = pixel.0;
+            let coords = (y as usize, x as usize);
+            array[[0, 0, coords.0, coords.1]] = normalize_channel(r, self.mean[0], self.std[0]);
+            array[[0, 1, coords.0, coords.1]] = normalize_channel(g, self.mean[1], self.std[1]);
+            array[[0, 2, coords.0, coords.1]] = normalize_channel(b, self.mean[2], self.std[2]);
+        }
+        Ok(array)
+    }
+}
+
+fn resize_to_square(img: DynamicImage, size: u32) -> RgbaImage {
+    img.resize_exact(size, size, FilterType::Triangle)
+        .to_rgba8()
+}
+
+fn normalize_channel(value: u8, mean: f32, std: f32) -> f32 {
+    let v = value as f32 / 255.0;
+    (v - mean) / std
+}
+
+fn softmax(logits: &[f32]) -> Vec<f32> {
+    let max = logits.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    let exps: Vec<f32> = logits.iter().map(|&x| (x - max).exp()).collect();
+    let sum: f32 = exps.iter().sum();
+    if sum == 0.0 {
+        return vec![0.0; logits.len()];
+    }
+    exps.into_iter().map(|x| x / sum).collect()
+}
+
+struct ClassificationResult {
+    present: bool,
+    classification: Option<Classification>,
 }
 
 #[cfg(test)]
