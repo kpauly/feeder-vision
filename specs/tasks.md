@@ -18,14 +18,16 @@
   - [x] Select folder; list image files (jpg/jpeg/png) (Scenario 1)
   - [x] Empty-folder UX message (Scenario 1)
   - [x] Optional: recursive scan toggle
-- [ ] **C2. Single-pass EfficientNet inference**
-  - [x] Candle EfficientNet classifier wrapper (`ClassifierConfig`, thresholds, background labels)
-  - [x] Bundle baseline `.safetensors` + `labels.csv` in `/models`
+- [ ] **C2. Single-pass EfficientViT inference**
+  - [x] Candle EfficientViT classifier wrapper (`ClassifierConfig`, thresholds, background labels)
+  - [x] Bundle baseline `feeder-efficientvit-m0.safetensors` + `feeder-labels.csv` in `/models`
   - [ ] Validate thresholds on feeder SD dumps; document recommended defaults
 - [ ] **C3. Model training pipeline**
   - [x] Load Roboflow `_classes.csv` splits (train/valid/test) into `DatasetSplit`
-  - [ ] Candle training script (data loader, augmentations, EfficientNet fine-tune loop)
-  - [ ] Export `.safetensors` + metrics artifact; hook into `/models`
+  - [x] Training scripts available:
+    - Rust CLI (`crates/effnet_train`) for local CPU training (EfficientNet baseline)
+    - Google Colab notebook `models/feeder-vision_EfficientViT-training.ipynb` for GPU fine-tuning EfficientViT
+  - [x] Export `.safetensors` + label CSV + Colab notebook under `/models`
 - [ ] **C4. Cropping / preprocessing**
   - [ ] Confirm 512×512 pipeline; pad/resize helper for inference + training reuse
 - [ ] **C5. Open-set safety**

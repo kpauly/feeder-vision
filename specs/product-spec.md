@@ -3,9 +3,9 @@
 Users point to an feeder camera SD card dump folder with thousands of frames; want animal presence + species offline and potentially file and folder reorganization.
 
 ## Scope v0
-- Single-stage EfficientNet classifier (Candle) runs on every frame: preprocess 512×512 input, infer `present` + species directly.
-- Model weights and label CSV ship with the app; users do not need Roboflow/online access.
-- Training happens offline from the Roboflow-exported dataset (train/valid/test CSVs); future updates can swap in retrained checkpoints.
+- Single-stage **EfficientViT-m0** classifier (Candle) runs on every frame: resize to 224×224, normalize, infer `present` + species directly.
+- Model weights (`feeder-efficientvit-m0.safetensors`) and label CSV (`feeder-labels.csv`) ship with the app under `/models`; users do not need Roboflow/online access.
+- Training happens offline from the Roboflow-exported dataset (train/valid/test CSVs) using the Colab notebook (`models/feeder-vision_EfficientViT-training.ipynb`). Updated checkpoints can be dropped into `/models` at any time.
 - Open-set behavior relies on classifier confidence + background classes (probability < T_min or predicted label ∈ background ⇒ “Unknown”).
 
 ## Deliverables
@@ -13,11 +13,11 @@ Users point to an feeder camera SD card dump folder with thousands of frames; wa
 - CSV export: file,present,species,confidence.
 - File reorganization: retain only files with animal presence, sort into species folders.
 - Reference pack updater (check for updates, manual import).
-- EfficientNet model package: `.safetensors` weights + `labels.csv` shipped with the installer; updated models can be swapped by dropping new files in `/models`.
+- EfficientViT model package: `.safetensors` weights + `labels.csv` shipped with the installer; updated models + training notebook live in `/models`.
 
 ## Model training & dataset
 - Roboflow export (`Voederhuiscamera.v2i.multiclass/{train,valid,test}`) is the canonical dataset. Each split contains `_classes.csv` (one-hot labels) and preprocessed 512×512 JPGs.
-- Candle training harness consumes those CSVs to fine-tune EfficientNet; outputs `.safetensors` + label list.
+- Training is performed in Google Colab (GPU) using the `feeder-vision_EfficientViT-training.ipynb` notebook; results (best `.safetensors` + labels + metrics) are copied back into `/models`.
 - Future improvement: optional “Send misclassified images” workflow that queues new samples for retraining (manual/manual-review only).
 
 ## UX Flow (v0)
@@ -34,9 +34,9 @@ Users point to an feeder camera SD card dump folder with thousands of frames; wa
 - 5k frames < 10 min on i5/16GB (no GPU), skipping 80% as empty.
 
 ## Classification & presence (v0 default)
-- EfficientNet-B0/B1/B2 (Candle) loads from `.safetensors` + labels. The classifier threshold controls “Aanwezig” vs “Leeg”.
+- EfficientViT-m0 (fine-tuned on the feeder dataset) loads from `.safetensors` + labels. The classifier threshold controls “Aanwezig” vs “Leeg”.
 - “Unknown”/empty is produced when the top probability is below `presence_threshold` or when the winning class is configured as a background label (e.g., “Achtergrond”).
-- Longer-term: allow swapping in other Candle classifiers (EfficientViT, ConvNeXt, etc.) without changing the GUI/CSV interface.
+- Longer-term: allow swapping in other Candle classifiers (EfficientNet, ConvNeXt, etc.) without changing the GUI/CSV interface.
 
 ## UX principles and i18n
 - Audience: absolute beginners; UI must be sleek and KISS.
