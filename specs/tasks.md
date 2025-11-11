@@ -20,7 +20,7 @@
   - [x] Optional: recursive scan toggle
 - [ ] **C2. Single-pass EfficientNet inference**
   - [x] Candle EfficientNet classifier wrapper (`ClassifierConfig`, thresholds, background labels)
-  - [ ] Bundle baseline `.safetensors` + `labels.csv` in `/models`
+  - [x] Bundle baseline `.safetensors` + `labels.csv` in `/models`
   - [ ] Validate thresholds on feeder SD dumps; document recommended defaults
 - [ ] **C3. Model training pipeline**
   - [x] Load Roboflow `_classes.csv` splits (train/valid/test) into `DatasetSplit`
