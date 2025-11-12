@@ -44,8 +44,8 @@
   - [x] Grid of thumbnails (virtualized) with lazy loading
   - [x] Pre-scan summary count on folder select (e.g., “Afbeeldingen in map: N”)
   - [x] Background scanning worker + progress bar (non-blocking UI)
-  - [x] Thumbnail cards show bestandsnaam + soort + vertrouwen; Windows-style multi-select in Aanwezig/Leeg tabs
-  - [ ] Progress bar should reach 100% + keep requesting repaint after scans so thumbnails load without manual interaction
+  - [x] Thumbnail & preview kaarten tonen bestandsnaam + soort + vertrouwen; Windows-style multi-select + Aanwezig/Leeg/Onzeker tabs + standalone viewer
+  - [ ] Progress bar should reach 100% + keep requesting repaint after scans so thumbnails load without manual interaction (partially met: progress & preview handled, still need auto-repaint).
 - [ ] **G2. Filters & review**
   - [x] Default view shows only “Aanwezig” (present)
   - [x] Toggle to switch “Aanwezig | Leeg” (Scenario 2 / 2b)

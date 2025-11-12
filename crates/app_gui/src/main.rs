@@ -29,34 +29,93 @@ enum ViewMode {
     #[default]
     Aanwezig,
     Leeg,
+    Onzeker,
 }
 
-#[derive(Default)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Panel {
+    Folder,
+    Results,
+    Settings,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PreviewAction {
+    None,
+    Prev,
+    Next,
+    Close,
+}
+
+#[derive(Clone)]
+struct PreviewState {
+    view: ViewMode,
+    current: usize,
+    open: bool,
+    viewport_id: egui::ViewportId,
+    initialized: bool,
+}
+
 struct UiApp {
     gekozen_map: Option<PathBuf>,
-    // Full results for the selected folder (after scanning)
     rijen: Vec<ImageInfo>,
-    // Pre-scan info and scan status
     total_files: usize,
     scanned_count: usize,
     has_scanned: bool,
     scan_in_progress: bool,
     status: String,
     view: ViewMode,
-    // Background scan channel
+    panel: Panel,
     rx: Option<Receiver<ScanMsg>>,
-    // Thumbnail cache (basic LRU)
     thumbs: HashMap<PathBuf, egui::TextureHandle>,
     thumb_keys: VecDeque<PathBuf>,
+    full_images: HashMap<PathBuf, egui::TextureHandle>,
+    full_keys: VecDeque<PathBuf>,
     selected_indices: BTreeSet<usize>,
     selection_anchor: Option<usize>,
+    presence_threshold: f32,
+    pending_presence_threshold: f32,
+    batch_size: usize,
+    background_labels_input: String,
+    background_labels: Vec<String>,
+    preview: Option<PreviewState>,
+}
+
+impl Default for UiApp {
+    fn default() -> Self {
+        Self {
+            gekozen_map: None,
+            rijen: Vec::new(),
+            total_files: 0,
+            scanned_count: 0,
+            has_scanned: false,
+            scan_in_progress: false,
+            status: String::new(),
+            view: ViewMode::default(),
+            panel: Panel::Folder,
+            rx: None,
+            thumbs: HashMap::new(),
+            thumb_keys: VecDeque::new(),
+            full_images: HashMap::new(),
+            full_keys: VecDeque::new(),
+            selected_indices: BTreeSet::new(),
+            selection_anchor: None,
+            presence_threshold: 0.5,
+            pending_presence_threshold: 0.5,
+            batch_size: 8,
+            background_labels_input: "Achtergrond".to_string(),
+            background_labels: vec!["achtergrond".to_string()],
+            preview: None,
+        }
+    }
 }
 
 const THUMB_SIZE: u32 = 120;
 const MAX_THUMBS: usize = 256;
+const MAX_FULL_IMAGES: usize = 32;
 const MAX_THUMB_LOAD_PER_FRAME: usize = 12;
-const CARD_WIDTH: f32 = THUMB_SIZE as f32 + 90.0;
-const CARD_HEIGHT: f32 = THUMB_SIZE as f32 + 110.0;
+const CARD_WIDTH: f32 = THUMB_SIZE as f32 + 40.0;
+const CARD_HEIGHT: f32 = THUMB_SIZE as f32 + 70.0;
 
 enum ScanMsg {
     Progress(usize, usize),     // scanned, total
@@ -97,16 +156,72 @@ impl UiApp {
         }
     }
 
-    fn filtered_indices(&self) -> Vec<usize> {
+    fn get_or_load_full_image(
+        &mut self,
+        ctx: &egui::Context,
+        path: &Path,
+    ) -> Option<egui::TextureHandle> {
+        if let Some(tex) = self.full_images.get(path) {
+            return Some(tex.clone());
+        }
+        match image::open(path) {
+            Ok(img) => {
+                let rgba = img.to_rgba8();
+                let (w, h) = rgba.dimensions();
+                let size = [w as usize, h as usize];
+                let pixels = rgba.into_raw();
+                let color = egui::ColorImage::from_rgba_unmultiplied(size, &pixels);
+                let name = format!("full:{}", path.display());
+                let tex = ctx.load_texture(name, color, egui::TextureOptions::LINEAR);
+                self.full_images.insert(path.to_path_buf(), tex.clone());
+                self.full_keys.push_back(path.to_path_buf());
+                while self.full_images.len() > MAX_FULL_IMAGES {
+                    if let Some(old) = self.full_keys.pop_front() {
+                        self.full_images.remove(&old);
+                    } else {
+                        break;
+                    }
+                }
+                Some(tex)
+            }
+            Err(e) => {
+                tracing::warn!("Failed to load full image for {}: {}", path.display(), e);
+                None
+            }
+        }
+    }
+
+    fn indices_for_view(&self, view: ViewMode) -> Vec<usize> {
         self.rijen
             .iter()
             .enumerate()
-            .filter_map(|(idx, info)| match self.view {
-                ViewMode::Aanwezig if info.present => Some(idx),
-                ViewMode::Leeg if !info.present => Some(idx),
+            .filter_map(|(idx, info)| match view {
+                ViewMode::Aanwezig if info.present && !self.is_onzeker(info) => Some(idx),
+                ViewMode::Leeg if !info.present && !self.is_onzeker(info) => Some(idx),
+                ViewMode::Onzeker if self.is_onzeker(info) => Some(idx),
                 _ => None,
             })
             .collect()
+    }
+
+    fn filtered_indices(&self) -> Vec<usize> {
+        self.indices_for_view(self.view)
+    }
+
+    fn view_counts(&self) -> (usize, usize, usize) {
+        let mut present = 0usize;
+        let mut empty = 0usize;
+        let mut unsure = 0usize;
+        for info in &self.rijen {
+            if self.is_onzeker(info) {
+                unsure += 1;
+            } else if info.present {
+                present += 1;
+            } else {
+                empty += 1;
+            }
+        }
+        (present, empty, unsure)
     }
 
     fn handle_select_shortcuts(&mut self, ctx: &egui::Context, filtered: &[usize]) {
@@ -184,12 +299,26 @@ impl UiApp {
         }
     }
 
+    fn open_preview(&mut self, filtered: &[usize], idx: usize) {
+        if let Some(pos) = filtered.iter().position(|&i| i == idx) {
+            let viewport_id =
+                egui::ViewportId::from_hash_of(("preview", self.view as u8, filtered[pos]));
+            self.preview = Some(PreviewState {
+                view: self.view,
+                current: pos,
+                open: true,
+                viewport_id,
+                initialized: false,
+            });
+        }
+    }
+
     fn thumbnail_caption(info: &ImageInfo) -> String {
         match &info.classification {
             Some(classification) => {
                 let label = match &classification.decision {
                     Decision::Label(name) => name.clone(),
-                    Decision::Unknown => "Unknown".to_string(),
+                    Decision::Unknown => "Leeg".to_string(),
                 };
                 format!("{label} ({:.1}%)", classification.confidence * 100.0)
             }
@@ -277,6 +406,454 @@ impl UiApp {
 
         response
     }
+
+    fn render_settings_panel(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Instellingen");
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            let slider =
+                egui::Slider::new(&mut self.pending_presence_threshold, 0.0..=1.0)
+                    .text("Onzekerheidsdrempel")
+                    .custom_formatter(|v, _| format!("{:.0}%", v * 100.0));
+            ui.add(slider);
+            if ui.button("Herbereken").clicked() {
+                self.presence_threshold = self.pending_presence_threshold;
+                self.apply_presence_threshold();
+                self.status = format!(
+                    "Onzekerheidsdrempel toegepast: {:.0}%",
+                    self.presence_threshold * 100.0
+                );
+                self.panel = Panel::Results;
+            }
+        });
+        ui.add_space(12.0);
+        ui.horizontal(|ui| {
+            ui.label("Batchgrootte");
+            let resp = ui
+                .add(egui::DragValue::new(&mut self.batch_size).range(1..=64).speed(1));
+            if resp.changed() {
+                self.status = "Nieuwe batchgrootte wordt toegepast bij volgende scan".to_string();
+            }
+        });
+        ui.add_space(12.0);
+        ui.horizontal(|ui| {
+            ui.label("Achtergrondlabels");
+            let response = ui.text_edit_singleline(&mut self.background_labels_input);
+            if response.changed() {
+                self.sync_background_labels();
+                self.status = "Achtergrondlabels bijgewerkt voor huidige resultaten".to_string();
+            }
+        });
+    }
+
+    fn render_folder_panel(&mut self, ui: &mut egui::Ui, _ctx: &egui::Context) {
+        if let Some(path) = &self.gekozen_map {
+            ui.label(format!("Fotomap: {}", path.display()));
+            ui.label(format!("Afbeeldingen in deze map: {}", self.total_files));
+        } else {
+            ui.label("Geen fotomap geselecteerd.");
+        }
+        ui.add_space(8.0);
+        if ui
+            .add_enabled(!self.scan_in_progress, egui::Button::new("Map kiezen..."))
+            .clicked()
+        {
+            if let Some(dir) = FileDialog::new().set_directory(".").pick_folder() {
+                self.set_selected_folder(dir);
+            }
+        }
+        let can_scan = self.gekozen_map.is_some() && !self.scan_in_progress;
+        if ui
+            .add_enabled(can_scan, egui::Button::new("Scannen"))
+            .clicked()
+        {
+            if let Some(dir) = self.gekozen_map.clone() {
+                self.start_scan(dir);
+                self.panel = Panel::Results;
+            }
+        }
+        if self.scan_in_progress {
+            ui.add_space(8.0);
+            self.render_progress_ui(ui);
+        }
+    }
+
+    fn render_results_panel(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        if self.scan_in_progress {
+            self.render_progress_ui(ui);
+            return;
+        }
+        if !self.has_scanned {
+            ui.label("Nog geen scan uitgevoerd.");
+            return;
+        }
+        if self.rijen.is_empty() {
+            ui.label("Geen resultaten beschikbaar.");
+            return;
+        }
+
+        let (count_present, count_empty, count_unsure) = self.view_counts();
+        ui.horizontal(|ui| {
+            let present_btn = ui.selectable_label(
+                self.view == ViewMode::Aanwezig,
+                format!("Aanwezig ({count_present})"),
+            );
+            let empty_btn = ui.selectable_label(
+                self.view == ViewMode::Leeg,
+                format!("Leeg ({count_empty})"),
+            );
+            let unsure_btn = ui.selectable_label(
+                self.view == ViewMode::Onzeker,
+                format!("Onzeker ({count_unsure})"),
+            );
+            if present_btn.clicked() {
+                self.view = ViewMode::Aanwezig;
+                self.thumbs.clear();
+                self.thumb_keys.clear();
+                self.selected_indices.clear();
+                self.selection_anchor = None;
+            }
+            if empty_btn.clicked() {
+                self.view = ViewMode::Leeg;
+                self.thumbs.clear();
+                self.thumb_keys.clear();
+                self.selected_indices.clear();
+                self.selection_anchor = None;
+            }
+            if unsure_btn.clicked() {
+                self.view = ViewMode::Onzeker;
+                self.thumbs.clear();
+                self.thumb_keys.clear();
+                self.selected_indices.clear();
+                self.selection_anchor = None;
+            }
+        });
+
+        let filtered = self.filtered_indices();
+        self.handle_select_shortcuts(ctx, &filtered);
+
+        if filtered.is_empty() {
+            ui.label("Geen frames om te tonen in deze weergave.");
+        } else {
+            ui.add_space(6.0);
+            egui::ScrollArea::vertical()
+                .auto_shrink([false; 2])
+                .show(ui, |ui| {
+                    let mut loaded_this_frame = 0usize;
+                    ui.horizontal_wrapped(|ui| {
+                        for &idx in &filtered {
+                            let is_selected = self.selected_indices.contains(&idx);
+                            let response = self.draw_thumbnail_card(
+                                ui,
+                                ctx,
+                                idx,
+                                is_selected,
+                                &mut loaded_this_frame,
+                            );
+                            if response.clicked() {
+                                let modifiers = ctx.input(|i| i.modifiers);
+                                self.handle_selection_click(&filtered, idx, modifiers);
+                            }
+                            if response.double_clicked() {
+                                self.open_preview(&filtered, idx);
+                            }
+                        }
+                    });
+                });
+        }
+    }
+
+    fn render_progress_ui(&self, ui: &mut egui::Ui) {
+        let total = self.total_files.max(1);
+        let frac = (self.scanned_count as f32) / (total as f32);
+        ui.add(egui::ProgressBar::new(frac).text(format!(
+            "Scannen... {} / {} ({:.0}%)",
+            self.scanned_count,
+            self.total_files,
+            frac * 100.0
+        )));
+    }
+
+    fn set_selected_folder(&mut self, dir: PathBuf) {
+        self.gekozen_map = Some(dir.clone());
+        self.panel = Panel::Folder;
+        self.rijen.clear();
+        self.status.clear();
+        self.has_scanned = false;
+        self.scanned_count = 0;
+        self.total_files = 0;
+        self.view = ViewMode::Aanwezig;
+        self.thumbs.clear();
+        self.thumb_keys.clear();
+        self.full_images.clear();
+        self.full_keys.clear();
+        match scan_folder_with(&dir, ScanOptions { recursive: false }) {
+            Ok(rows) => {
+                self.total_files = rows.len();
+            }
+            Err(e) => {
+                self.status = format!("Fout bij lezen van map: {e}");
+            }
+        }
+    }
+
+    fn start_scan(&mut self, dir: PathBuf) {
+        self.scan_in_progress = true;
+        self.status = "Bezig met scannen...".to_string();
+        self.scanned_count = 0;
+        self.panel = Panel::Results;
+        let (tx, rx): (Sender<ScanMsg>, Receiver<ScanMsg>) = mpsc::channel();
+        self.rx = Some(rx);
+        let cfg = self.classifier_config();
+        thread::spawn(move || {
+            let t0 = Instant::now();
+            let mut rows = match scan_folder_with(&dir, ScanOptions { recursive: false }) {
+                Ok(r) => r,
+                Err(e) => {
+                    let _ = tx.send(ScanMsg::Error(format!("Map scannen mislukt: {e}")));
+                    tracing::warn!("scan_folder_with failed: {}", e);
+                    return;
+                }
+            };
+            let total = rows.len();
+            let _ = tx.send(ScanMsg::Progress(0, total));
+            let classifier = match EfficientVitClassifier::new(&cfg) {
+                Ok(c) => c,
+                Err(e) => {
+                    let _ = tx.send(ScanMsg::Error(format!("Model laden mislukt: {e}")));
+                    return;
+                }
+            };
+            let tx_progress = tx.clone();
+            if let Err(e) = classifier.classify_with_progress(&mut rows, |done, total| {
+                let _ = tx_progress.send(ScanMsg::Progress(done.min(total), total));
+            }) {
+                let _ = tx.send(ScanMsg::Error(format!("Classificatie mislukt: {e}")));
+                return;
+            }
+
+            let _ = tx.send(ScanMsg::Progress(total, total));
+            let elapsed_ms = t0.elapsed().as_millis();
+            let _ = tx.send(ScanMsg::Done(rows, elapsed_ms));
+        });
+    }
+
+    fn render_preview_window(&mut self, ctx: &egui::Context) {
+        let Some(mut preview) = self.preview.take() else {
+            return;
+        };
+        if !preview.open {
+            return;
+        }
+        let indices = self.indices_for_view(preview.view);
+        if indices.is_empty() {
+            return;
+        }
+        if preview.current >= indices.len() {
+            preview.current = indices.len() - 1;
+        }
+        let current_idx = indices[preview.current];
+        let Some(info) = self.rijen.get(current_idx) else {
+            return;
+        };
+        let file_name = info
+            .file
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| info.file.to_string_lossy().to_string());
+        let info_path = info.file.clone();
+        let classification = info.classification.clone();
+        let status_text = classification
+            .as_ref()
+            .map(|classification| {
+                let label = match &classification.decision {
+                    Decision::Label(name) => name.clone(),
+                    Decision::Unknown => "Leeg".to_string(),
+                };
+                format!("{} ({:.1}%)", label, classification.confidence * 100.0)
+            })
+            .unwrap_or_else(|| "Geen classificatie beschikbaar.".to_string());
+        let full_tex = self.get_or_load_full_image(ctx, &info_path);
+        let tex_info = full_tex
+            .as_ref()
+            .map(|tex| (tex.id(), tex.size_vec2()));
+        let viewport_id = preview.viewport_id;
+        let mut builder = egui::ViewportBuilder::default().with_title(file_name.clone());
+        if !preview.initialized {
+            builder = builder.with_inner_size([640.0, 480.0]);
+        }
+        let mut action = PreviewAction::None;
+        let status_panel_id = format!("preview-status-{viewport_id:?}");
+        ctx.show_viewport_immediate(viewport_id, builder, |ctx, _class| {
+            let mut wants_prev = false;
+            let mut wants_next = false;
+            ctx.input(|input| {
+                for event in &input.events {
+                    if let egui::Event::Key {
+                        key: egui::Key::ArrowLeft,
+                        pressed: true,
+                        ..
+                    } = event
+                    {
+                        wants_prev = true;
+                    } else if let egui::Event::Key {
+                        key: egui::Key::ArrowRight,
+                        pressed: true,
+                        ..
+                    } = event
+                    {
+                        wants_next = true;
+                    }
+                }
+            });
+            if ctx.input(|i| i.viewport().close_requested()) {
+                action = PreviewAction::Close;
+            }
+            egui::TopBottomPanel::bottom(status_panel_id.clone())
+                .resizable(false)
+                .show(ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(&status_text);
+                    });
+                });
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    let prev_disabled = preview.current == 0;
+                    if ui
+                        .add_enabled(!prev_disabled, egui::Button::new("◀ Vorige"))
+                        .clicked()
+                    {
+                        action = PreviewAction::Prev;
+                    }
+                    if wants_prev && !prev_disabled {
+                        action = PreviewAction::Prev;
+                    }
+                    let next_disabled = preview.current + 1 >= indices.len();
+                    if ui
+                        .add_enabled(!next_disabled, egui::Button::new("Volgende ▶"))
+                        .clicked()
+                    {
+                        action = PreviewAction::Next;
+                    }
+                    if wants_next && !next_disabled {
+                        action = PreviewAction::Next;
+                    }
+                    ui.label(format!(
+                        "{} / {}",
+                        preview.current + 1,
+                        indices.len()
+                    ));
+                });
+                ui.separator();
+                if let Some((tex_id, tex_size)) = tex_info {
+                    let avail = ui.available_size();
+                    let scale = (avail.x / tex_size.x)
+                        .min(avail.y / tex_size.y)
+                        .max(0.01);
+                    let draw_size = tex_size * scale;
+                    ui.allocate_ui_with_layout(
+                        avail,
+                        egui::Layout::centered_and_justified(egui::Direction::TopDown),
+                        |ui| {
+                            ui.add(
+                                egui::Image::new((tex_id, tex_size))
+                                    .fit_to_exact_size(draw_size),
+                            );
+                        },
+                    );
+                } else {
+                    ui.label("Afbeelding kon niet geladen worden.");
+                }
+            });
+        });
+        preview.initialized = true;
+        match action {
+            PreviewAction::Prev => {
+                if preview.current > 0 {
+                    preview.current -= 1;
+                }
+            }
+            PreviewAction::Next => {
+                if preview.current + 1 < indices.len() {
+                    preview.current += 1;
+                }
+            }
+            PreviewAction::Close => preview.open = false,
+            PreviewAction::None => {}
+        }
+        if preview.open {
+            self.preview = Some(preview);
+        }
+    }
+
+
+    fn apply_presence_threshold(&mut self) {
+        let threshold = self.presence_threshold;
+        let backgrounds = &self.background_labels;
+        for info in &mut self.rijen {
+            let mut present = false;
+            if let Some(classification) = &info.classification {
+                match &classification.decision {
+                    Decision::Label(name) => {
+                        let lower = name.to_ascii_lowercase();
+                        if !backgrounds.iter().any(|bg| bg == &lower) {
+                            present = classification.confidence >= threshold;
+                        }
+                    }
+                    Decision::Unknown => present = false,
+                }
+            }
+            info.present = present;
+        }
+    }
+
+    fn is_background_label(&self, name_lower: &str) -> bool {
+        self.background_labels.iter().any(|bg| bg == name_lower)
+    }
+
+    fn is_onzeker(&self, info: &ImageInfo) -> bool {
+        let Some(classification) = &info.classification else {
+            return false;
+        };
+        match &classification.decision {
+            Decision::Label(name) => {
+                let lower = name.to_ascii_lowercase();
+                if lower == "iets sp" {
+                    return true;
+                }
+                if self.is_background_label(&lower) {
+                    return false;
+                }
+                classification.confidence < self.presence_threshold
+            }
+            Decision::Unknown => false,
+        }
+    }
+
+    fn sync_background_labels(&mut self) {
+        let parsed: Vec<String> = self
+            .background_labels_input
+            .split(',')
+            .map(|s| s.trim().to_ascii_lowercase())
+            .filter(|s| !s.is_empty())
+            .collect();
+        self.background_labels = if parsed.is_empty() {
+            vec!["achtergrond".to_string()]
+        } else {
+            parsed
+        };
+        if !self.rijen.is_empty() {
+            self.apply_presence_threshold();
+        }
+    }
+
+    fn classifier_config(&self) -> ClassifierConfig {
+        let mut cfg = ClassifierConfig::default();
+        cfg.presence_threshold = self.pending_presence_threshold;
+        cfg.batch_size = self.batch_size.max(1);
+        cfg.background_labels = self.background_labels.clone();
+        cfg
+    }
 }
 
 impl App for UiApp {
@@ -296,12 +873,14 @@ impl App for UiApp {
                         self.rijen = rows;
                         self.thumbs.clear();
                         self.thumb_keys.clear();
+                        self.presence_threshold = self.pending_presence_threshold;
+                        self.apply_presence_threshold();
                         self.selected_indices.clear();
                         self.selection_anchor = None;
                         let totaal = self.total_files;
-                        let aanwezig = self.rijen.iter().filter(|r| r.present).count();
+                        let (count_present, _, _) = self.view_counts();
                         self.status = format!(
-                            "Gereed: Dieren gevonden in {aanwezig} van {totaal} frames ({:.1} s)",
+                            "Gereed: Dieren gevonden in {count_present} van {totaal} frames ({:.1} s)",
                             (elapsed_ms as f32) / 1000.0
                         );
                         keep = false;
@@ -329,87 +908,26 @@ impl App for UiApp {
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if ui
-                    .add_enabled(!self.scan_in_progress, egui::Button::new("Kies map..."))
+                    .add(egui::Button::new("Fotomap").selected(self.panel == Panel::Folder))
                     .clicked()
-                    && let Some(dir) = FileDialog::new().set_directory(".").pick_folder()
                 {
-                    self.gekozen_map = Some(dir.clone());
-                    self.rijen.clear();
-                    self.status.clear();
-                    self.has_scanned = false;
-                    self.scanned_count = 0;
-                    self.total_files = 0;
-                    self.view = ViewMode::Aanwezig;
-                    self.thumbs.clear();
-                    self.thumb_keys.clear();
-                    // Pre-scan: count supported images (non-recursive for v0)
-                    match scan_folder_with(&dir, ScanOptions { recursive: false }) {
-                        Ok(rows) => {
-                            self.total_files = rows.len();
-                        }
-                        Err(e) => {
-                            self.status = format!("Fout bij lezen van map: {e}");
-                        }
-                    }
+                    self.panel = Panel::Folder;
                 }
-
-                let kan_scannen = self.gekozen_map.is_some()
-                    && !self.scan_in_progress
-                    && !self.status.contains("Fout");
+                let can_view_results = self.has_scanned || self.scan_in_progress;
                 if ui
-                    .add_enabled(kan_scannen, egui::Button::new("Scannen"))
+                    .add_enabled(
+                        can_view_results,
+                        egui::Button::new("Scanresultaat")
+                            .selected(self.panel == Panel::Results),
+                    )
                     .clicked()
-                    && let Some(dir) = self.gekozen_map.clone()
                 {
-                    self.scan_in_progress = true;
-                    self.status = "Bezig met scannen...".to_string();
-                    self.scanned_count = 0;
-                    // Background worker
-                    let (tx, rx): (Sender<ScanMsg>, Receiver<ScanMsg>) = mpsc::channel();
-                    self.rx = Some(rx);
-                    thread::spawn(move || {
-                        let t0 = Instant::now();
-                        let mut rows =
-                            match scan_folder_with(&dir, ScanOptions { recursive: false }) {
-                                Ok(r) => r,
-                                Err(e) => {
-                                    let _ = tx
-                                        .send(ScanMsg::Error(format!("Map scannen mislukt: {e}")));
-                                    tracing::warn!("scan_folder_with failed: {}", e);
-                                    return;
-                                }
-                            };
-                        let total = rows.len();
-                        let _ = tx.send(ScanMsg::Progress(0, total));
-                        let cfg = ClassifierConfig::default();
-                        let classifier = match EfficientVitClassifier::new(&cfg) {
-                            Ok(c) => c,
-                            Err(e) => {
-                                let _ =
-                                    tx.send(ScanMsg::Error(format!("Model laden mislukt: {e}")));
-                                return;
-                            }
-                        };
-                        let tx_progress = tx.clone();
-                        if let Err(e) =
-                            classifier.classify_with_progress(&mut rows, |done, total| {
-                                let _ = tx_progress.send(ScanMsg::Progress(done.min(total), total));
-                            })
-                        {
-                            let _ = tx.send(ScanMsg::Error(format!("Classificatie mislukt: {e}")));
-                            return;
-                        }
-
-                        let _ = tx.send(ScanMsg::Progress(total, total));
-                        let elapsed_ms = t0.elapsed().as_millis();
-                        let _ = tx.send(ScanMsg::Done(rows, elapsed_ms));
-                    });
+                    self.panel = Panel::Results;
                 }
-
-                let kan_exporteren =
+                let can_export =
                     self.has_scanned && !self.rijen.is_empty() && !self.scan_in_progress;
                 if ui
-                    .add_enabled(kan_exporteren, egui::Button::new("Exporteer CSV"))
+                    .add_enabled(can_export, egui::Button::new("Exporteren"))
                     .clicked()
                     && let Some(path) = FileDialog::new()
                         .add_filter("CSV", &["csv"])
@@ -422,88 +940,37 @@ impl App for UiApp {
                         self.status = format!("CSV opgeslagen: {}", path.display());
                     }
                 }
-
-                if !self.status.is_empty() {
-                    ui.label(&self.status);
+                if ui
+                    .add(egui::Button::new("Instellingen").selected(self.panel == Panel::Settings))
+                    .clicked()
+                {
+                    self.panel = Panel::Settings;
                 }
             });
         });
+        egui::CentralPanel::default().show(ctx, |ui| match self.panel {
+            Panel::Folder => self.render_folder_panel(ui, ctx),
+            Panel::Results => self.render_results_panel(ui, ctx),
+            Panel::Settings => self.render_settings_panel(ui),
+        });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            // Pre-scan summary
-            if self.gekozen_map.is_some() && !self.has_scanned && !self.scan_in_progress {
-                ui.label(format!("Afbeeldingen in map: {}", self.total_files));
-                if self.total_files == 0 {
-                    ui.heading("Geen afbeeldingen gevonden");
-                }
-            }
+        self.render_preview_window(ctx);
 
-            // Progress during scanning
+        let status_display = if self.status.is_empty() {
             if self.scan_in_progress {
-                let total = self.total_files.max(1);
-                let frac = (self.scanned_count as f32) / (total as f32);
-                ui.add(egui::ProgressBar::new(frac).text(format!(
-                    "Scannen... {} / {} ({:.0}%)",
-                    self.scanned_count,
-                    self.total_files,
-                    frac * 100.0
-                )));
-                return; // Skip gallery while scanning
+                "Bezig met scannen...".to_string()
+            } else if self.has_scanned {
+                "Gereed.".to_string()
+            } else {
+                "Klaar.".to_string()
             }
-
-            // Post-scan summary and gallery
-            if self.has_scanned {
-                let totaal = self.total_files;
-                let aanwezig = self.rijen.iter().filter(|r| r.present).count();
-                ui.label(format!("Dieren gevonden in {aanwezig} van {totaal} frames"));
-
-                // View toggle
-                ui.horizontal(|ui| {
-                    let present_btn =
-                        ui.selectable_label(self.view == ViewMode::Aanwezig, "Aanwezig");
-                    let empty_btn = ui.selectable_label(self.view == ViewMode::Leeg, "Leeg");
-                    if present_btn.clicked() {
-                        self.view = ViewMode::Aanwezig;
-                        self.thumbs.clear();
-                        self.thumb_keys.clear();
-                    }
-                    if empty_btn.clicked() {
-                        self.view = ViewMode::Leeg;
-                        self.thumbs.clear();
-                        self.thumb_keys.clear();
-                    }
-                });
-
-                let filtered = self.filtered_indices();
-                self.handle_select_shortcuts(ctx, &filtered);
-
-                if filtered.is_empty() {
-                    ui.label("Geen frames om te tonen in deze weergave.");
-                } else {
-                    ui.add_space(6.0);
-                    egui::ScrollArea::vertical()
-                        .auto_shrink([false; 2])
-                        .show(ui, |ui| {
-                            let mut loaded_this_frame = 0usize;
-                            ui.horizontal_wrapped(|ui| {
-                                for &idx in &filtered {
-                                    let is_selected = self.selected_indices.contains(&idx);
-                                    let response = self.draw_thumbnail_card(
-                                        ui,
-                                        ctx,
-                                        idx,
-                                        is_selected,
-                                        &mut loaded_this_frame,
-                                    );
-                                    if response.clicked() {
-                                        let modifiers = ctx.input(|i| i.modifiers);
-                                        self.handle_selection_click(&filtered, idx, modifiers);
-                                    }
-                                }
-                            });
-                        });
-                }
-            }
+        } else {
+            self.status.clone()
+        };
+        egui::TopBottomPanel::bottom("status-bar").show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(status_display);
+            });
         });
     }
 }

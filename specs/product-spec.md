@@ -22,10 +22,10 @@ Users point to a feeder camera SD card dump folder with thousands of frames; the
 - Future improvement: optional “Send misclassified images” workflow that queues new samples for retraining (manual/manual-review only).
 
 ## UX Flow (v0)
-- Map kiezen (folder picker) toont direct een samenvatting: “Afbeeldingen in map: N”. Er is vóór het scannen geen galerijweergave van alle bestanden.
+- Map kiezen gebeurt via het **Fotomap**-paneel: toont pad + "Afbeeldingen in deze map: N" en laat schakelen tussen Fotomap, Scanresultaat en Instellingen zonder acties opnieuw te starten.
 - Scannen start je expliciet. Tijdens scannen draait detectie op een achtergrondthread; de UI blijft responsief en toont een voortgangsbalk (X/Y, percentage). Knoppen “Kies map…” en “Scannen” zijn uitgeschakeld gedurende het scannen.
 - Na scannen toont de UI een samenvatting: “Dieren gevonden in X van Y frames”.
-- De galerij toont standaard alleen frames met aanwezigheid (present-only). Er is een snelle schakelaar om te wisselen naar “Leeg” (frames zonder aanwezigheid).
+- De galerij toont tabs **Aanwezig | Leeg | Onzeker**; dubbelklikken opent een los previewvenster met Vorige/Volgende (ook pijltjes) en statusbalk (label + confidence).
 - Thumbnails worden lui (on-demand) geladen met een per-frame limiet om de UI vloeiend te houden bij grote aantallen. Elke kaart toont bestandsnaam + soort + vertrouwen en ondersteunt Windows-achtige selectie (klik, Ctrl/Cmd-klik, Shift-bereik, Ctrl-A) voor contextacties.
 
 ## Non-goals v0
