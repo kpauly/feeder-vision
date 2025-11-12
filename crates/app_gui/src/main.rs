@@ -1,7 +1,7 @@
 use eframe::{App, Frame, NativeOptions, egui};
 use feeder_core::{
-    ClassifierConfig, Decision, EfficientVitClassifier, ImageInfo, ScanOptions, export_csv,
-    scan_folder_with,
+    Classification, ClassifierConfig, Decision, EfficientVitClassifier, ImageInfo, ScanOptions,
+    export_csv, scan_folder_with,
 };
 use rfd::FileDialog;
 use std::collections::{BTreeSet, HashMap, VecDeque};
@@ -313,14 +313,19 @@ impl UiApp {
         }
     }
 
-    fn thumbnail_caption(info: &ImageInfo) -> String {
-        match &info.classification {
-            Some(classification) => {
-                let label = match &classification.decision {
-                    Decision::Label(name) => name.clone(),
-                    Decision::Unknown => "Leeg".to_string(),
-                };
-                format!("{label} ({:.1}%)", classification.confidence * 100.0)
+fn thumbnail_caption(info: &ImageInfo) -> String {
+    match &info.classification {
+        Some(classification) => {
+            let label = match &classification.decision {
+                Decision::Label(name) => {
+                    if let Some(stripped) = name.strip_suffix(" (manueel)") {
+                        return format!("{stripped} (manueel)");
+                    }
+                    name.clone()
+                }
+                Decision::Unknown => "Leeg".to_string(),
+            };
+            format!("{label} ({:.1}%)", classification.confidence * 100.0)
             }
             None => "Geen classificatie".to_string(),
         }
@@ -404,6 +409,10 @@ impl UiApp {
         child.add_space(4.0);
         child.label(egui::RichText::new(caption).small());
 
+        let targets = self.context_targets(idx);
+        response.context_menu(|ui| {
+            self.render_context_menu(ui, &targets);
+        });
         response
     }
 
@@ -557,6 +566,10 @@ impl UiApp {
                             if response.double_clicked() {
                                 self.open_preview(&filtered, idx);
                             }
+                            let targets = self.context_targets(idx);
+                            response.context_menu(|ui| {
+                                self.render_context_menu(ui, &targets);
+                            });
                         }
                     });
                 });
@@ -665,12 +678,15 @@ impl UiApp {
         let classification = info.classification.clone();
         let status_text = classification
             .as_ref()
-            .map(|classification| {
-                let label = match &classification.decision {
-                    Decision::Label(name) => name.clone(),
-                    Decision::Unknown => "Leeg".to_string(),
-                };
-                format!("{} ({:.1}%)", label, classification.confidence * 100.0)
+            .map(|classification| match &classification.decision {
+                Decision::Label(name) => {
+                    if let Some(stripped) = name.strip_suffix(" (manueel)") {
+                        format!("{stripped} (manueel)")
+                    } else {
+                        format!("{} ({:.1}%)", name, classification.confidence * 100.0)
+                    }
+                }
+                Decision::Unknown => "Leeg".to_string(),
             })
             .unwrap_or_else(|| "Geen classificatie beschikbaar.".to_string());
         let full_tex = self.get_or_load_full_image(ctx, &info_path);
@@ -684,6 +700,7 @@ impl UiApp {
         }
         let mut action = PreviewAction::None;
         let status_panel_id = format!("preview-status-{viewport_id:?}");
+        let current_targets = vec![current_idx];
         ctx.show_viewport_immediate(viewport_id, builder, |ctx, _class| {
             let mut wants_prev = false;
             let mut wants_next = false;
@@ -712,8 +729,9 @@ impl UiApp {
             egui::TopBottomPanel::bottom(status_panel_id.clone())
                 .resizable(false)
                 .show(ctx, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(&status_text);
+                    let label = ui.label(&status_text);
+                    label.context_menu(|ui| {
+                        self.render_context_menu(ui, &current_targets);
                     });
                 });
             egui::CentralPanel::default().show(ctx, |ui| {
@@ -751,16 +769,19 @@ impl UiApp {
                         .min(avail.y / tex_size.y)
                         .max(0.01);
                     let draw_size = tex_size * scale;
-                    ui.allocate_ui_with_layout(
+                    let inner = ui.allocate_ui_with_layout(
                         avail,
                         egui::Layout::centered_and_justified(egui::Direction::TopDown),
                         |ui| {
                             ui.add(
                                 egui::Image::new((tex_id, tex_size))
                                     .fit_to_exact_size(draw_size),
-                            );
+                            )
                         },
                     );
+                    inner.response.context_menu(|ui| {
+                        self.render_context_menu(ui, &current_targets);
+                    });
                 } else {
                     ui.label("Afbeelding kon niet geladen worden.");
                 }
@@ -817,7 +838,7 @@ impl UiApp {
         };
         match &classification.decision {
             Decision::Label(name) => {
-                let lower = name.to_ascii_lowercase();
+                let lower = canonical_label(name);
                 if lower == "iets sp" {
                     return true;
                 }
@@ -972,5 +993,84 @@ impl App for UiApp {
                 ui.label(status_display);
             });
         });
+    }
+}
+
+impl UiApp {
+    fn render_context_menu(&mut self, ui: &mut egui::Ui, indices: &[usize]) {
+        if ui.button("Markeer als Achtergrond (Leeg)").clicked() {
+            self.assign_manual_category(indices, "achtergrond".into(), false);
+            ui.close();
+        }
+        if ui.button("Markeer als Iets sp. (Onzeker)").clicked() {
+            self.assign_manual_category(indices, "iets sp".into(), false);
+            ui.close();
+        }
+        ui.separator();
+        for label in self.available_labels().into_iter().filter(|label| {
+            let lower = label.to_ascii_lowercase();
+            lower != "achtergrond" && lower != "iets sp"
+        }) {
+            let display = display_label(&label);
+            if ui.button(display).clicked() {
+                self.assign_manual_category(indices, label, true);
+                ui.close();
+            }
+        }
+    }
+
+    fn available_labels(&self) -> Vec<String> {
+        let mut set: std::collections::BTreeSet<String> = self.background_labels.clone().into_iter().collect();
+        set.insert("iets sp".into());
+        for info in &self.rijen {
+            if let Some(classification) = &info.classification {
+                if let Decision::Label(name) = &classification.decision {
+                    set.insert(canonical_label(name));
+                }
+            }
+        }
+        set.into_iter().collect()
+    }
+
+    fn assign_manual_category(&mut self, indices: &[usize], label: String, mark_present: bool) {
+        let lower = label.to_ascii_lowercase();
+        let display = display_label(&label);
+        for &idx in indices {
+            if let Some(info) = self.rijen.get_mut(idx) {
+                info.classification = Some(Classification {
+                    decision: Decision::Label(format!("{display} (manueel)")),
+                    confidence: 1.0,
+                });
+                info.present = mark_present && lower != "achtergrond";
+            }
+        }
+        self.status = format!("{} kaart(en) gemarkeerd als {}", indices.len(), display);
+    }
+
+    fn context_targets(&self, idx: usize) -> Vec<usize> {
+        if self.selected_indices.contains(&idx) && !self.selected_indices.is_empty() {
+            self.selected_indices.iter().copied().collect()
+        } else {
+            vec![idx]
+        }
+    }
+}
+
+fn canonical_label(name: &str) -> String {
+    name.strip_suffix(" (manueel)")
+        .unwrap_or(name)
+        .to_ascii_lowercase()
+}
+
+fn display_label(name: &str) -> String {
+    match name {
+        "iets sp" => "Iets sp.".to_string(),
+        _ => {
+            let mut chars = name.chars();
+            match chars.next() {
+                Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
+                None => String::new(),
+            }
+        }
     }
 }
