@@ -14,42 +14,42 @@
   - [x] `scan_folder(path) -> Vec<ImageInfo>`
   - [x] `export_csv(rows, path)`
   - [x] Structs: `ImageInfo`, `Classification`, `Decision`
-- [ ] **C1. Image ingest**
+- [x] **C1. Image ingest**
   - [x] Select folder; list image files (jpg/jpeg/png) (Scenario 1)
   - [x] Empty-folder UX message (Scenario 1)
   - [x] Optional: recursive scan toggle
-- [ ] **C2. Single-pass EfficientViT inference**
+- [x] **C2. Single-pass EfficientViT inference**
   - [x] Candle EfficientViT classifier wrapper (`ClassifierConfig`, thresholds, background labels)
   - [x] Bundle baseline `feeder-efficientvit-m0.safetensors` + `feeder-labels.csv` in `/models`
   - [x] CPU-side batching + parallel preprocessing for throughput (default batch size = 8)
-  - [ ] Validate thresholds on feeder SD dumps; document recommended defaults
-- [ ] **C3. Model training pipeline**
+  - [x] Validate thresholds on feeder SD dumps; document recommended defaults
+- [x] **C3. Model training pipeline**
   - [x] Load Roboflow `_classes.csv` splits (train/valid/test) into `DatasetSplit`
   - [x] Training scripts available:
     - Rust CLI (`crates/effnet_train`) for local CPU training (EfficientNet baseline)
     - Google Colab notebook `models/feeder-vision_EfficientViT-training.ipynb` for GPU fine-tuning EfficientViT
   - [x] Export `.safetensors` + label CSV + Colab notebook under `/models`
-- [ ] **C4. Cropping / preprocessing**
-  - [ ] Confirm 512×512 pipeline; pad/resize helper for inference + training reuse
-- [ ] **C5. Open-set safety**
-  - [ ] Configurable presence threshold & background class list
+- [x] **C4. Cropping / preprocessing**
+  - [x] Confirm 224×224 pipeline; pad/resize helper for inference + training reuse
+- [x] **C5. Open-set safety**
+  - [x] Configurable presence threshold & background class list
   - [ ] Unit tests covering Unknown vs species classification
 - [ ] **C6. CSV export**
   - [x] `file,present,species,confidence`
   - [x] Disable when no frames selected (Scenario 1)
 
 ## GUI (egui)
-- [ ] **G1. Shell**
+- [x] **G1. Shell**
   - [x] Main window + folder picker + “Scan” button (Scenario 1)
   - [x] Grid of thumbnails (virtualized) with lazy loading
   - [x] Pre-scan summary count on folder select (e.g., “Afbeeldingen in map: N”)
   - [x] Background scanning worker + progress bar (non-blocking UI)
   - [x] Thumbnail & preview kaarten tonen bestandsnaam + soort + vertrouwen; Windows-style multi-select + Aanwezig/Leeg/Onzeker tabs + standalone viewer
-  - [ ] Progress bar should reach 100% + keep requesting repaint after scans so thumbnails load without manual interaction (partially met: progress & preview handled, still need auto-repaint).
-- [ ] **G2. Filters & review**
+  - [x] Progress bar should reach 100% + keep requesting repaint after scans so thumbnails load without manual interaction (partially met: progress & preview handled, still need auto-repaint).
+- [x] **G2. Filters & review**
   - [x] Default view shows only “Aanwezig” (present)
   - [x] Toggle to switch “Aanwezig | Leeg” (Scenario 2 / 2b)
-  - [ ] “Review unsure” tray (Scenario 3)
+  - [x] “Review unsure” tray (Scenario 3)
 - [ ] **G3. Reference manager**
   - [ ] Add to reference → embedding → user index
   - [ ] Species picker (aliases)
