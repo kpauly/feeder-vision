@@ -313,19 +313,19 @@ impl UiApp {
         }
     }
 
-fn thumbnail_caption(info: &ImageInfo) -> String {
-    match &info.classification {
-        Some(classification) => {
-            let label = match &classification.decision {
-                Decision::Label(name) => {
-                    if let Some(stripped) = name.strip_suffix(" (manueel)") {
-                        return format!("{stripped} (manueel)");
+    fn thumbnail_caption(info: &ImageInfo) -> String {
+        match &info.classification {
+            Some(classification) => {
+                let label = match &classification.decision {
+                    Decision::Label(name) => {
+                        if let Some(stripped) = name.strip_suffix(" (manueel)") {
+                            return format!("{stripped} (manueel)");
+                        }
+                        name.clone()
                     }
-                    name.clone()
-                }
-                Decision::Unknown => "Leeg".to_string(),
-            };
-            format!("{label} ({:.1}%)", classification.confidence * 100.0)
+                    Decision::Unknown => "Leeg".to_string(),
+                };
+                format!("{label} ({:.1}%)", classification.confidence * 100.0)
             }
             None => "Geen classificatie".to_string(),
         }
@@ -420,10 +420,9 @@ fn thumbnail_caption(info: &ImageInfo) -> String {
         ui.heading("Instellingen");
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            let slider =
-                egui::Slider::new(&mut self.pending_presence_threshold, 0.0..=1.0)
-                    .text("Onzekerheidsdrempel")
-                    .custom_formatter(|v, _| format!("{:.0}%", v * 100.0));
+            let slider = egui::Slider::new(&mut self.pending_presence_threshold, 0.0..=1.0)
+                .text("Onzekerheidsdrempel")
+                .custom_formatter(|v, _| format!("{:.0}%", v * 100.0));
             ui.add(slider);
             if ui.button("Herbereken").clicked() {
                 self.presence_threshold = self.pending_presence_threshold;
@@ -438,8 +437,11 @@ fn thumbnail_caption(info: &ImageInfo) -> String {
         ui.add_space(12.0);
         ui.horizontal(|ui| {
             ui.label("Batchgrootte");
-            let resp = ui
-                .add(egui::DragValue::new(&mut self.batch_size).range(1..=64).speed(1));
+            let resp = ui.add(
+                egui::DragValue::new(&mut self.batch_size)
+                    .range(1..=64)
+                    .speed(1),
+            );
             if resp.changed() {
                 self.status = "Nieuwe batchgrootte wordt toegepast bij volgende scan".to_string();
             }
@@ -507,10 +509,8 @@ fn thumbnail_caption(info: &ImageInfo) -> String {
                 self.view == ViewMode::Aanwezig,
                 format!("Aanwezig ({count_present})"),
             );
-            let empty_btn = ui.selectable_label(
-                self.view == ViewMode::Leeg,
-                format!("Leeg ({count_empty})"),
-            );
+            let empty_btn =
+                ui.selectable_label(self.view == ViewMode::Leeg, format!("Leeg ({count_empty})"));
             let unsure_btn = ui.selectable_label(
                 self.view == ViewMode::Onzeker,
                 format!("Onzeker ({count_unsure})"),
@@ -566,10 +566,6 @@ fn thumbnail_caption(info: &ImageInfo) -> String {
                             if response.double_clicked() {
                                 self.open_preview(&filtered, idx);
                             }
-                            let targets = self.context_targets(idx);
-                            response.context_menu(|ui| {
-                                self.render_context_menu(ui, &targets);
-                            });
                         }
                     });
                 });
@@ -690,9 +686,7 @@ fn thumbnail_caption(info: &ImageInfo) -> String {
             })
             .unwrap_or_else(|| "Geen classificatie beschikbaar.".to_string());
         let full_tex = self.get_or_load_full_image(ctx, &info_path);
-        let tex_info = full_tex
-            .as_ref()
-            .map(|tex| (tex.id(), tex.size_vec2()));
+        let tex_info = full_tex.as_ref().map(|tex| (tex.id(), tex.size_vec2()));
         let viewport_id = preview.viewport_id;
         let mut builder = egui::ViewportBuilder::default().with_title(file_name.clone());
         if !preview.initialized {
@@ -729,8 +723,9 @@ fn thumbnail_caption(info: &ImageInfo) -> String {
             egui::TopBottomPanel::bottom(status_panel_id.clone())
                 .resizable(false)
                 .show(ctx, |ui| {
-                    let label = ui.label(&status_text);
-                    label.context_menu(|ui| {
+                    let response =
+                        ui.add(egui::Label::new(status_text.clone()).sense(egui::Sense::click()));
+                    response.context_menu(|ui| {
                         self.render_context_menu(ui, &current_targets);
                     });
                 });
@@ -756,18 +751,12 @@ fn thumbnail_caption(info: &ImageInfo) -> String {
                     if wants_next && !next_disabled {
                         action = PreviewAction::Next;
                     }
-                    ui.label(format!(
-                        "{} / {}",
-                        preview.current + 1,
-                        indices.len()
-                    ));
+                    ui.label(format!("{} / {}", preview.current + 1, indices.len()));
                 });
                 ui.separator();
                 if let Some((tex_id, tex_size)) = tex_info {
                     let avail = ui.available_size();
-                    let scale = (avail.x / tex_size.x)
-                        .min(avail.y / tex_size.y)
-                        .max(0.01);
+                    let scale = (avail.x / tex_size.x).min(avail.y / tex_size.y).max(0.01);
                     let draw_size = tex_size * scale;
                     let inner = ui.allocate_ui_with_layout(
                         avail,
@@ -775,11 +764,12 @@ fn thumbnail_caption(info: &ImageInfo) -> String {
                         |ui| {
                             ui.add(
                                 egui::Image::new((tex_id, tex_size))
-                                    .fit_to_exact_size(draw_size),
+                                    .fit_to_exact_size(draw_size)
+                                    .sense(egui::Sense::click()),
                             )
                         },
                     );
-                    inner.response.context_menu(|ui| {
+                    inner.inner.context_menu(|ui| {
                         self.render_context_menu(ui, &current_targets);
                     });
                 } else {
@@ -806,7 +796,6 @@ fn thumbnail_caption(info: &ImageInfo) -> String {
             self.preview = Some(preview);
         }
     }
-
 
     fn apply_presence_threshold(&mut self) {
         let threshold = self.presence_threshold;
@@ -938,8 +927,7 @@ impl App for UiApp {
                 if ui
                     .add_enabled(
                         can_view_results,
-                        egui::Button::new("Scanresultaat")
-                            .selected(self.panel == Panel::Results),
+                        egui::Button::new("Scanresultaat").selected(self.panel == Panel::Results),
                     )
                     .clicked()
                 {
@@ -1020,7 +1008,8 @@ impl UiApp {
     }
 
     fn available_labels(&self) -> Vec<String> {
-        let mut set: std::collections::BTreeSet<String> = self.background_labels.clone().into_iter().collect();
+        let mut set: std::collections::BTreeSet<String> =
+            self.background_labels.clone().into_iter().collect();
         set.insert("iets sp".into());
         for info in &self.rijen {
             if let Some(classification) = &info.classification {
@@ -1057,9 +1046,9 @@ impl UiApp {
 }
 
 fn canonical_label(name: &str) -> String {
-    name.strip_suffix(" (manueel)")
-        .unwrap_or(name)
-        .to_ascii_lowercase()
+    let stripped = name.strip_suffix(" (manueel)").unwrap_or(name).trim();
+    let cleaned = stripped.trim_end_matches('.');
+    cleaned.to_ascii_lowercase()
 }
 
 fn display_label(name: &str) -> String {
