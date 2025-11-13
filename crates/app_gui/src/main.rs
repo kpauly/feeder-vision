@@ -1,3 +1,5 @@
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 use eframe::{App, Frame, NativeOptions, egui};
 use feeder_core::{
     Classification, ClassifierConfig, Decision, EfficientVitClassifier, ImageInfo, ScanOptions,
@@ -11,6 +13,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 fn main() {
+    #[cfg(debug_assertions)]
     tracing_subscriber::fmt::init();
     let options = NativeOptions::default();
     if let Err(e) = eframe::run_native(
@@ -90,10 +93,13 @@ struct UiApp {
     // Settings: Roboflow
     improve_recognition: bool,
     roboflow_dataset_input: String,
+    upload_status_tx: Sender<String>,
+    upload_status_rx: Receiver<String>,
 }
 
 impl Default for UiApp {
     fn default() -> Self {
+        let (upload_status_tx, upload_status_rx) = mpsc::channel();
         Self {
             gekozen_map: None,
             rijen: Vec::new(),
@@ -121,6 +127,8 @@ impl Default for UiApp {
             new_label_buffer: String::new(),
             improve_recognition: false,
             roboflow_dataset_input: "voederhuiscamera".to_string(),
+            upload_status_tx,
+            upload_status_rx,
         }
     }
 }
@@ -901,6 +909,9 @@ impl UiApp {
 
 impl App for UiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut Frame) {
+        while let Ok(msg) = self.upload_status_rx.try_recv() {
+            self.status = msg;
+        }
         // Drain scan messages first
         if let Some(rx) = self.rx.take() {
             let mut keep = true;
@@ -1142,24 +1153,36 @@ impl UiApp {
             let label_for_upload = display.clone();
             let api_key = ROBOFLOW_API_KEY.trim();
             if api_key.is_empty() {
-                tracing::warn!("Roboflow upload staat aan, maar er is geen API-sleutel ingebouwd");
-            } else if !dataset.is_empty() && !paths.is_empty() {
-                // Spawn a background thread to upload the selected images
+                self.status =
+                    "Roboflow upload staat aan, maar er is geen API-sleutel ingebouwd.".to_string();
+            } else if dataset.is_empty() {
+                self.status = "Roboflow upload niet uitgevoerd: dataset ontbreekt.".to_string();
+            } else if paths.is_empty() {
+                self.status =
+                    "Roboflow upload niet uitgevoerd: geen foto's geselecteerd.".to_string();
+            } else {
+                let upload_count = paths.len();
+                let status_tx = self.upload_status_tx.clone();
+                self.status = "Foto('s) met manuele identificatie worden geüpload...".to_string();
                 std::thread::spawn(move || {
+                    let mut last_err: Option<String> = None;
                     for path in paths {
                         if let Err(e) =
                             upload_to_roboflow(&path, &label_for_upload, &dataset, api_key)
                         {
-                            tracing::warn!("Roboflow upload failed for {}: {}", path.display(), e);
-                        } else {
-                            tracing::info!("Roboflow upload succeeded for {}", path.display());
+                            last_err = Some(e.to_string());
+                            break;
                         }
                     }
+                    let message = if let Some(err) = last_err {
+                        format!("Upload van foto('s) met manuele identificatie mislukt: {err}")
+                    } else if upload_count == 1 {
+                        "Foto met manuele identificatie geüpload.".to_string()
+                    } else {
+                        format!("{upload_count} foto's met manuele identificatie geüpload.")
+                    };
+                    let _ = status_tx.send(message);
                 });
-            } else {
-                tracing::warn!(
-                    "Roboflow upload niet uitgevoerd: dataset ontbreekt of geen paden geselecteerd"
-                );
             }
         }
     }
