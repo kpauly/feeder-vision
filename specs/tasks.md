@@ -60,6 +60,7 @@
   - [x] Instellingen checkbox “Help de herkenning te verbeteren” + dataset veld (prefilled met `voederhuiscamera`)
   - [x] Achtergrondthread die manuele herlabelingen (single/multi select) uploadt zonder de UI te blokkeren
   - [x] API-callketen (upload + annotate) gebruikt vaste sleutel en datasetnaam en logt succes/fouten, conform Scenario 5
+  - [x] Contextmenu “Nieuw…” invoer voor nieuwe labels; bevestiging zet kaarten naar Aanwezig en stuurt uploads mee (Scenario 6)
 
 ## Reference packs
 - [ ] **R1. Starter pack loader**

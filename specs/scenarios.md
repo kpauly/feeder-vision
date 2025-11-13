@@ -36,3 +36,9 @@ Given the Instellingen panel is open
 And the user enables "Help de herkenning te verbeteren" and leaves the dataset name at "voederhuiscamera"
 When the user recategorizes one or more images via the context menu
 Then a background upload is triggered and the Roboflow dataset receives the images with the selected label without blocking the UI
+
+Scenario 6: Create a new category via "Nieuw..."
+Given the user opens the context menu on one or more selected thumbnails
+And the menu shows the "Nieuw... >" entry
+When the user types a new label name, presses Enter (or clicks OK), and the upload toggle is enabled
+Then the frames immediately get the manual label, move to the Aanwezig tab, and the image+label is uploaded to Roboflow in the background

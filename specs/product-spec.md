@@ -17,6 +17,7 @@ Users point to a feeder camera SD card dump folder with thousands of frames; the
 - Reference pack updater (check for updates, manual import).
 - EfficientViT model package: `.safetensors` weights + `labels.csv` shipped with the installer; updated models + training notebook live in `/models`.
 - Roboflow feedback toggle: built-in API key + dataset field, with a background uploader that pushes every manual re-labelling (single or multi select) to dataset `voederhuiscamera`.
+- Contextmenu bevat een “Nieuw…”-optie waarmee gebruikers on-the-fly een nieuwe soortnaam kunnen ingeven; de selectie krijgt meteen het manuele label en (indien upload is ingeschakeld) wordt samen met het label naar Roboflow verstuurd.
 
 ## Model training & dataset
 - Roboflow export (`Voederhuiscamera.v2i.multiclass/{train,valid,test}`) is the canonical dataset. Each split contains `_classes.csv` (one-hot labels) and preprocessed 512x512 JPGs.
@@ -30,6 +31,7 @@ Users point to a feeder camera SD card dump folder with thousands of frames; the
 - De galerij toont tabs **Aanwezig | Leeg | Onzeker**; dubbelklikken opent een los previewvenster met Vorige/Volgende (ook pijltjes) en statusbalk (label + confidence).
 - Thumbnails worden lui (on-demand) geladen met een per-frame limiet om de UI vloeiend te houden bij grote aantallen. Elke kaart toont bestandsnaam + soort + vertrouwen en ondersteunt Windows-achtige selectie (klik, Ctrl/Cmd-klik, Shift-bereik, Ctrl-A) voor contextacties.
 - Instellingen bevat sliders voor onzekerheidsdrempel, batchgrootte, achtergrondlabels en de nieuwe sectie "Help de herkenning te verbeteren", inclusief datasetveld en uitleg dat uploads volledig op de achtergrond plaatsvinden zodra de checkbox aan staat.
+- Het contextmenu onder thumbnails toont eerst quick actions (achtergrond, onzeker), daarna bestaande soorten, en sluit af met “Nieuw… >” waar de gebruiker een eigen label kan invullen; na bevestiging verschuift de kaart automatisch naar Aanwezig en, indien van toepassing, triggert een Roboflow-upload.
 
 ## Non-goals v0
 - Training, cloud inference, mobile, multi-user sync.

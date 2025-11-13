@@ -86,6 +86,7 @@ struct UiApp {
     background_labels: Vec<String>,
     preview: Option<PreviewState>,
     label_options: Vec<LabelOption>,
+    new_label_buffer: String,
     // Settings: Roboflow
     improve_recognition: bool,
     roboflow_dataset_input: String,
@@ -117,6 +118,7 @@ impl Default for UiApp {
             background_labels: vec!["achtergrond".to_string()],
             preview: None,
             label_options: Self::load_label_options(),
+            new_label_buffer: String::new(),
             improve_recognition: false,
             roboflow_dataset_input: "voederhuiscamera".to_string(),
         }
@@ -1061,6 +1063,29 @@ impl UiApp {
                 ui.close();
             }
         }
+        ui.separator();
+        ui.menu_button("Nieuw... >", |ui| {
+            ui.label("Vul een nieuwe soortnaam in:");
+            ui.horizontal(|ui| {
+                let resp = ui.add(
+                    egui::TextEdit::singleline(&mut self.new_label_buffer)
+                        .hint_text("Nieuwe soort"),
+                );
+                let mut submit = false;
+                if resp.lost_focus()
+                    && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                    && !self.new_label_buffer.trim().is_empty()
+                {
+                    submit = true;
+                }
+                if ui.button("OK").clicked() {
+                    submit = true;
+                }
+                if submit && self.apply_new_label(indices) {
+                    ui.close();
+                }
+            });
+        });
     }
 
     fn available_labels(&self) -> Vec<String> {
@@ -1136,6 +1161,33 @@ impl UiApp {
                 );
             }
         }
+    }
+
+    fn apply_new_label(&mut self, indices: &[usize]) -> bool {
+        let trimmed = self.new_label_buffer.trim();
+        if trimmed.is_empty() {
+            self.status = "Geen label ingevuld.".to_string();
+            return false;
+        }
+        let new_label = trimmed.to_string();
+        let canonical = canonical_label(&new_label);
+        if canonical.is_empty() {
+            self.status = "Label is ongeldig.".to_string();
+            return false;
+        }
+        if !self
+            .label_options
+            .iter()
+            .any(|option| option.canonical == canonical)
+        {
+            self.label_options.push(LabelOption {
+                canonical: canonical.clone(),
+                display: new_label.clone(),
+            });
+        }
+        self.assign_manual_category(indices, new_label, true);
+        self.new_label_buffer.clear();
+        true
     }
 
     fn context_targets(&self, idx: usize) -> Vec<usize> {
