@@ -14,6 +14,7 @@ Users point to a feeder camera SD card dump folder with thousands of frames; the
 - GUI (egui): folder ingest, grid, review-uncertain tray, "Add to reference"; start with UI in Dutch only, prepare for multi-language support.
 - CSV export: `file,present,species,confidence`.
 - File reorganization: retain only files with animal presence, sort into species folders.
+- Snelle contextmenu-export: "Exporteren" bovenaan elke selectie laat je een doelmap kiezen, maakt submappen per soort aan en kopieert de geselecteerde beelden als `<soort>_<originele bestandsnaam>.jpg`.
 - Reference pack updater (check for updates, manual import).
 - EfficientViT model package: `.safetensors` weights + `labels.csv` shipped with the installer; updated models + training notebook live in `/models`.
 - Roboflow feedback toggle: built-in API key + dataset field, with a background uploader that pushes every manual re-labelling (single or multi select) to dataset `voederhuiscamera`.
@@ -31,7 +32,7 @@ Users point to a feeder camera SD card dump folder with thousands of frames; the
 - De galerij toont tabs **Aanwezig | Leeg | Onzeker**; dubbelklikken opent een los previewvenster met Vorige/Volgende (ook pijltjes) en statusbalk (label + confidence).
 - Thumbnails worden lui (on-demand) geladen met een per-frame limiet om de UI vloeiend te houden bij grote aantallen. Elke kaart toont bestandsnaam + soort + vertrouwen en ondersteunt Windows-achtige selectie (klik, Ctrl/Cmd-klik, Shift-bereik, Ctrl-A) voor contextacties.
 - Instellingen bevat sliders voor onzekerheidsdrempel, batchgrootte, achtergrondlabels en de nieuwe sectie "Help de herkenning te verbeteren", inclusief datasetveld en uitleg dat uploads volledig op de achtergrond plaatsvinden zodra de checkbox aan staat.
-- Het contextmenu onder thumbnails toont eerst quick actions (achtergrond, onzeker), daarna bestaande soorten, en sluit af met “Nieuw… >” waar de gebruiker een eigen label kan invullen; na bevestiging verschuift de kaart automatisch naar Aanwezig en, indien van toepassing, triggert een Roboflow-upload.
+- Het contextmenu onder thumbnails toont eerst quick actions (achtergrond, onzeker), daarna "Exporteren ›" (opent een mapkiezer en kopieert de selectie per soortmap), vervolgens de bestaande soorten en sluit af met “Nieuw… >” waar de gebruiker een eigen label kan invullen; na bevestiging verschuift de kaart automatisch naar Aanwezig en, indien van toepassing, triggert een Roboflow-upload.
 
 ## Non-goals v0
 - Training, cloud inference, mobile, multi-user sync.

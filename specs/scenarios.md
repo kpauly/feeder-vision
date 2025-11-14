@@ -42,3 +42,10 @@ Given the user opens the context menu on one or more selected thumbnails
 And the menu shows the "Nieuw... >" entry
 When the user types a new label name, presses Enter (or clicks OK), and the upload toggle is enabled
 Then the frames immediately get the manual label, move to the Aanwezig tab, and the image+label is uploaded to Roboflow in the background
+
+Scenario 7: Export selected thumbnails to labeled folders
+Given one or more thumbnails with possibly different species are selected
+And the context menu is opened on the selection
+When the user clicks "Exporteren", picks (or creates) a destination folder, and confirms "Opslaan"
+Then the app creates subfolders named after each category label under the chosen folder
+And it copies every selected image into the matching subfolder with filename `<label>_<originalfilename>.jpg`

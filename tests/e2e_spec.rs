@@ -62,3 +62,15 @@ fn e2e_scenario_6_create_new_category_via_nieuw() {
     // Then the frames immediately get the manual label, move to the Aanwezig tab, and the image+label is uploaded to Roboflow in the background
     todo!("Implement Scenario 6 E2E");
 }
+
+#[test]
+#[ignore = "E2E not implemented; see specs/scenarios.md"]
+fn e2e_scenario_7_export_selected_thumbnails() {
+    // Scenario 7: Export selected thumbnails to labeled folders
+    // Given one or more thumbnails with possibly different species are selected
+    // And the context menu is opened on the selection
+    // When the user clicks "Exporteren", picks (or creates) a destination folder, and confirms "Opslaan"
+    // Then the app creates subfolders named after each category label under the chosen folder
+    // And it copies every selected image into the matching subfolder with filename `<label>_<originalfilename>.jpg`
+    todo!("Implement Scenario 7 E2E");
+}

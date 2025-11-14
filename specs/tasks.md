@@ -50,6 +50,10 @@
   - [x] Default view shows only “Aanwezig” (present)
   - [x] Toggle to switch “Aanwezig | Leeg” (Scenario 2 / 2b)
   - [x] “Review unsure” tray (Scenario 3)
+- [x] **G4. Contextmenu export**
+  - [x] Bovenste "Exporteren"-optie in thumbnail-contextmenu met standaard submenupijl
+  - [x] Folder picker + submap per soort en bestandsnaam `<label>_<origineel>.jpg`
+  - [ ] (Follow-up) Exportprogressie + waarschuwing bij ontbrekende labels
 - [ ] **G3. Reference manager**
   - [ ] Add to reference → embedding → user index
   - [ ] Species picker (aliases)
@@ -77,6 +81,8 @@
   - [ ] unit: threshold logic; e2e: out-of-gallery image → “Unknown”
 - [ ] **S5. Scenario 5: Opt-in Roboflow upload**
   - [ ] e2e: toggle helpt de herkenning → recategorisatie triggert achtergrondupload en logging
+- [ ] **S7. Scenario 7: Export selected thumbnails**
+  - [ ] e2e: multi-select → contextmenu Exporteren → bestanden belanden in soortmappen met juiste naamgeving
 
 ## Packaging
 - [ ] **P1. Config & models**

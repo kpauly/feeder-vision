@@ -7,6 +7,7 @@ use feeder_core::{
 };
 use rfd::FileDialog;
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
@@ -1058,6 +1059,11 @@ impl UiApp {
     }
 
     fn render_context_menu(&mut self, ui: &mut egui::Ui, indices: &[usize]) {
+        ui.menu_button("Exporteren", |ui| {
+            ui.close();
+            self.export_selected_images(indices);
+        });
+        ui.separator();
         if ui.button("Markeer als Achtergrond (Leeg)").clicked() {
             self.assign_manual_category(indices, "achtergrond".into(), false);
             ui.close();
@@ -1098,6 +1104,96 @@ impl UiApp {
                 }
             });
         });
+    }
+
+    fn export_selected_images(&mut self, indices: &[usize]) {
+        if indices.is_empty() {
+            self.status = "Geen foto's geselecteerd voor export.".to_string();
+            return;
+        }
+
+        let mut dialog = FileDialog::new();
+        if let Some(dir) = &self.gekozen_map {
+            dialog = dialog.set_directory(dir);
+        }
+
+        let Some(target_dir) = dialog.pick_folder() else {
+            self.status = "Export geannuleerd.".to_string();
+            return;
+        };
+
+        match self.copy_selection_to(&target_dir, indices) {
+            Ok(0) => {
+                self.status =
+                    "Geen export uitgevoerd: geen bruikbare bestanden gevonden.".to_string();
+            }
+            Ok(count) => {
+                self.status = format!(
+                    "{count} foto('s) geëxporteerd naar {}",
+                    target_dir.display()
+                );
+            }
+            Err(err) => {
+                self.status = format!("Exporteren mislukt: {err}");
+            }
+        }
+    }
+
+    fn copy_selection_to(&self, target_dir: &Path, indices: &[usize]) -> anyhow::Result<usize> {
+        use anyhow::Context;
+
+        let mut copied = 0usize;
+        for &idx in indices {
+            let Some(info) = self.rijen.get(idx) else {
+                continue;
+            };
+            let label = self.label_for_export(info);
+            let folder_name = sanitize_for_path(&label);
+            if folder_name.is_empty() {
+                continue;
+            }
+            let label_dir = target_dir.join(&folder_name);
+            fs::create_dir_all(&label_dir)
+                .with_context(|| format!("Kon map {} niet aanmaken", label_dir.display()))?;
+
+            let sanitized_label = sanitize_for_path(&label);
+            let stem = info
+                .file
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("image");
+            let sanitized_stem = sanitize_for_path(stem);
+            let base_name = if sanitized_stem.is_empty() {
+                sanitized_label.clone()
+            } else {
+                format!("{sanitized_label}_{sanitized_stem}")
+            };
+            let dest_path = next_available_export_path(&label_dir, &base_name, "jpg");
+            fs::copy(&info.file, &dest_path).with_context(|| {
+                format!(
+                    "Kopiëren van {} naar {} mislukt",
+                    info.file.display(),
+                    dest_path.display()
+                )
+            })?;
+            copied += 1;
+        }
+
+        Ok(copied)
+    }
+
+    fn label_for_export(&self, info: &ImageInfo) -> String {
+        match info.classification.as_ref().map(|c| &c.decision) {
+            Some(Decision::Label(name)) => self.display_for(name),
+            Some(Decision::Unknown) => "Onbekend".to_string(),
+            None => {
+                if info.present {
+                    "Onbekend".to_string()
+                } else {
+                    "Leeg".to_string()
+                }
+            }
+        }
     }
 
     fn available_labels(&self) -> Vec<String> {
@@ -1264,6 +1360,34 @@ fn fallback_display_label(name: &str) -> String {
         }
     }
     result
+}
+
+fn sanitize_for_path(input: &str) -> String {
+    let mut sanitized = String::with_capacity(input.len());
+    for ch in input.chars() {
+        if matches!(ch, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*') {
+            sanitized.push('_');
+        } else {
+            sanitized.push(ch);
+        }
+    }
+    sanitized.trim().trim_matches('.').to_string()
+}
+
+fn next_available_export_path(base_dir: &Path, base: &str, ext: &str) -> PathBuf {
+    let mut attempt = 0usize;
+    loop {
+        let filename = if attempt == 0 {
+            format!("{base}.{ext}")
+        } else {
+            format!("{base}_{attempt}.{ext}")
+        };
+        let candidate = base_dir.join(&filename);
+        if !candidate.exists() {
+            return candidate;
+        }
+        attempt += 1;
+    }
 }
 
 fn upload_to_roboflow(
