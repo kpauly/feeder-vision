@@ -47,7 +47,7 @@ Users point to a feeder camera SD card dump folder with thousands of frames; the
 ## Classification & presence (v0 default)
 - EfficientViT-m0 (fine-tuned on the feeder dataset) loads from `.safetensors` + labels. The classifier threshold controls "Aanwezig" vs "Leeg".
 - "Unknown"/empty is produced when the top probability is below `presence_threshold` or when the winning class is configured as a background label (e.g., "Achtergrond").
-- Longer-term: allow swapping in other Candle classifiers (EfficientNet, ConvNeXt, etc.) without changing the GUI/CSV interface.
+- Longer-term: allow swapping in other Candle classifiers (ConvNeXt, etc.) without changing the GUI/CSV interface.
 
 ## UX principles and i18n
 - Audience: absolute beginners; UI must be sleek and KISS.

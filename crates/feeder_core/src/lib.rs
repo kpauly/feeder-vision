@@ -5,10 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
-pub use classifier::{
-    ClassifierConfig, EfficientNetVariant, EfficientVitClassifier, EfficientVitVariant,
-};
-pub use training::{DatasetSample, DatasetSplit, TrainingConfig, load_dataset};
+pub use classifier::{ClassifierConfig, EfficientVitClassifier, EfficientVitVariant};
 
 /// Classification decision for an image/crop.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -183,31 +180,12 @@ mod classifier {
     use anyhow::{Context, Result};
     use candle_core::{D, DType, Device, Tensor};
     use candle_nn::{self as nn, Func, Module, VarBuilder};
-    use candle_transformers::models::efficientnet::MBConvConfig;
     use candle_transformers::models::efficientvit::{
         self as efficientvit_model, Config as EfficientVitConfig,
     };
     use rayon::prelude::*;
     use std::fs;
     use std::path::PathBuf;
-
-    #[derive(Debug, Clone, Copy, Default)]
-    pub enum EfficientNetVariant {
-        #[default]
-        B0,
-        B1,
-        B2,
-    }
-
-    impl EfficientNetVariant {
-        pub fn configs(&self) -> Vec<MBConvConfig> {
-            match self {
-                Self::B0 => MBConvConfig::b0(),
-                Self::B1 => MBConvConfig::b1(),
-                Self::B2 => MBConvConfig::b2(),
-            }
-        }
-    }
 
     #[derive(Debug, Clone, Copy, Default)]
     pub enum EfficientVitVariant {
@@ -483,111 +461,6 @@ mod classifier {
     struct ClassificationResult {
         present: bool,
         classification: Option<Classification>,
-    }
-}
-
-pub mod training {
-    use anyhow::{Context, Result};
-    use std::path::{Path, PathBuf};
-
-    #[derive(Debug, Clone)]
-    pub struct DatasetSample {
-        pub image_path: PathBuf,
-        pub targets: Vec<f32>,
-        pub label_index: Option<usize>,
-    }
-
-    #[derive(Debug, Clone)]
-    pub struct DatasetSplit {
-        pub name: String,
-        pub samples: Vec<DatasetSample>,
-        pub class_names: Vec<String>,
-    }
-
-    #[derive(Debug, Clone)]
-    pub struct TrainingConfig {
-        pub dataset_root: PathBuf,
-        pub variant: super::classifier::EfficientNetVariant,
-        pub epochs: usize,
-        pub batch_size: usize,
-        pub learning_rate: f64,
-    }
-
-    impl Default for TrainingConfig {
-        fn default() -> Self {
-            Self {
-                dataset_root: PathBuf::from("Voederhuiscamera.v2i.multiclass"),
-                variant: super::classifier::EfficientNetVariant::B0,
-                epochs: 10,
-                batch_size: 32,
-                learning_rate: 3e-4,
-            }
-        }
-    }
-
-    /// Load one split (train/valid/test) from a Roboflow export (class CSV + images).
-    pub fn load_split(split_dir: impl AsRef<Path>) -> Result<DatasetSplit> {
-        let dir = split_dir.as_ref();
-        let csv_path = dir.join("_classes.csv");
-        let mut rdr = csv::Reader::from_path(&csv_path)
-            .with_context(|| format!("kan CSV niet lezen: {}", csv_path.display()))?;
-        let headers = rdr
-            .headers()
-            .context("CSV zonder headers")?
-            .iter()
-            .map(|h| h.to_string())
-            .collect::<Vec<_>>();
-        if headers.len() < 2 {
-            anyhow::bail!("CSV mist klasses: {}", csv_path.display());
-        }
-        let class_names = headers[1..].to_vec();
-        let mut samples = Vec::new();
-        for record in rdr.records() {
-            let record = record?;
-            if record.len() != headers.len() {
-                continue;
-            }
-            let filename = record.get(0).unwrap();
-            let mut targets = Vec::with_capacity(class_names.len());
-            for value in record.iter().skip(1) {
-                targets.push(value.parse::<f32>().unwrap_or(0.0));
-            }
-            let label_index = targets
-                .iter()
-                .enumerate()
-                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
-                .map(|(idx, _)| idx);
-            samples.push(DatasetSample {
-                image_path: dir.join(filename),
-                targets,
-                label_index,
-            });
-        }
-        Ok(DatasetSplit {
-            name: dir
-                .file_name()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_else(|| "split".into()),
-            samples,
-            class_names,
-        })
-    }
-
-    /// Convenience helper that loads train/valid/test and logs the counts.
-    pub fn load_dataset(
-        cfg: &TrainingConfig,
-    ) -> Result<(DatasetSplit, DatasetSplit, DatasetSplit)> {
-        let train = load_split(cfg.dataset_root.join("train"))?;
-        let valid = load_split(cfg.dataset_root.join("valid"))?;
-        let test = load_split(cfg.dataset_root.join("test"))?;
-        tracing::info!(
-            "Dataset geladen: train={} valid={} test={} klassen={}",
-            train.samples.len(),
-            valid.samples.len(),
-            test.samples.len(),
-            train.class_names.len()
-        );
-        Ok((train, valid, test))
     }
 }
 

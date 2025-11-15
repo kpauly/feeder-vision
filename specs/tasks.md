@@ -26,7 +26,6 @@
 - [x] **C3. Model training pipeline**
   - [x] Load Roboflow `_classes.csv` splits (train/valid/test) into `DatasetSplit`
   - [x] Training scripts available:
-    - Rust CLI (`crates/effnet_train`) for local CPU training (EfficientNet baseline)
     - Google Colab notebook `models/feeder-vision_EfficientViT-training.ipynb` for GPU fine-tuning EfficientViT
   - [x] Export `.safetensors` + label CSV + Colab notebook under `/models`
 - [x] **C4. Cropping / preprocessing**
