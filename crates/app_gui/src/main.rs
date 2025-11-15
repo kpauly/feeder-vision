@@ -694,7 +694,6 @@ impl UiApp {
                     if let Some(notes) = &summary.model_notes {
                         ui.label(notes);
                     }
-                    ui.hyperlink_to("Bekijk release", &summary.model_url);
                     self.render_model_download_actions(ui, &summary);
                 } else {
                     ui.label("Herkenningsmodel is up-to-date.");
@@ -1246,11 +1245,17 @@ impl App for UiApp {
                 }
             });
         });
-        egui::CentralPanel::default().show(ctx, |ui| match self.panel {
-            Panel::Folder => self.render_folder_panel(ui, ctx),
-            Panel::Results => self.render_results_panel(ui, ctx),
-            Panel::Export => self.render_export_panel(ui),
-            Panel::Settings => self.render_settings_panel(ui),
+        egui::CentralPanel::default().show(ctx, |ui| {
+            match self.panel {
+                Panel::Folder => self.render_folder_panel(ui, ctx),
+                Panel::Results => self.render_results_panel(ui, ctx),
+                Panel::Export => self.render_export_panel(ui),
+                Panel::Settings => {
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        self.render_settings_panel(ui)
+                    });
+                }
+            }
         });
 
         self.render_preview_window(ctx);
