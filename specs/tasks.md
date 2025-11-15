@@ -33,9 +33,10 @@
 - [x] **C5. Open-set safety**
   - [x] Configurable presence threshold & background class list
   - [ ] Unit tests covering Unknown vs species classification
-- [ ] **C6. CSV export**
+- [x] **C6. CSV export**
   - [x] `file,present,species,confidence`
   - [x] Disable when no frames selected (Scenario 1)
+  - [ ] (Follow-up) Exportprogressie + waarschuwing bij ontbrekende labels
 
 ## GUI (egui)
 - [x] **G1. Shell**
@@ -93,9 +94,15 @@
   - [ ] e2e: opties aanvinken → map kiezen → coördinaten invullen → submappen + CSV gemaakt
 
 ## Packaging
-- [ ] **P1. Config & models**
-  - [ ] `/models` lookup + friendly missing-model error (weights + labels)
+- [x] **P1. Config & models**
+  - [x] `/models` bundling + AppData deployment with fallback when missing
   - [ ] App config (toml/json): thresholds, background labels, batch size
-- [ ] **P2. Release**
-  - [ ] `cargo build --release`; smoke on Windows 11
+- [x] **P2. Release**
+  - [x] `cargo build --release`; smoke on Windows 11
+  - [x] Windows installer (`FeedieSetup.exe`) published with bundled model
   - [ ] (Optional) self-update later via `self_update`
+- [x] **P3. Manifest & updater**
+  - [x] `manifest.json` hosted via GitHub raw
+  - [x] In-app version display + manifest fetch with retry/error states
+  - [x] Automatic model ZIP download/extract into `%AppData%\Feedie\models`
+  - [ ] (Follow-up) App auto-update prompt/linking to latest installer
