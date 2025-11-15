@@ -133,32 +133,22 @@ struct UpdateSummary {
     model_notes: Option<String>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 enum ManifestStatus {
+    #[default]
     Idle,
     Checking,
     Ready(UpdateSummary),
     Error(String),
 }
 
-impl Default for ManifestStatus {
-    fn default() -> Self {
-        ManifestStatus::Idle
-    }
-}
-
-#[derive(Clone)]
+#[derive(Clone, Default)]
 enum ModelDownloadStatus {
+    #[default]
     Idle,
     Downloading,
     Success(String),
     Error(String),
-}
-
-impl Default for ModelDownloadStatus {
-    fn default() -> Self {
-        ModelDownloadStatus::Idle
-    }
 }
 
 struct UiApp {
@@ -276,8 +266,7 @@ const MAX_THUMB_LOAD_PER_FRAME: usize = 12;
 const CARD_WIDTH: f32 = THUMB_SIZE as f32 + 40.0;
 const CARD_HEIGHT: f32 = THUMB_SIZE as f32 + 70.0;
 const ROBOFLOW_API_KEY: &str = "g9zfZxZVNuSr43ENZJMg";
-const MANIFEST_URL: &str =
-    "https://raw.githubusercontent.com/kpauly/feeder-vision/main/manifest.json";
+const MANIFEST_URL: &str = "https://github.com/kpauly/feeder-vision/raw/main/manifest.json";
 const MODEL_FILE_NAME: &str = "feeder-efficientvit-m0.safetensors";
 const LABEL_FILE_NAME: &str = "feeder-labels.csv";
 const VERSION_FILE_NAME: &str = "model_version.txt";
@@ -2336,17 +2325,19 @@ fn download_and_install_model(url: &str, target_root: &Path, version: &str) -> a
         if !src.exists() {
             return Err(anyhow!("Bestand {name} ontbreekt in modelupdate."));
         }
-        fs::copy(&src, &target_root.join(name)).with_context(|| {
+        let dest = target_root.join(name);
+        fs::copy(&src, &dest).with_context(|| {
             format!(
                 "Kopiëren van {} naar {} mislukt",
                 src.display(),
-                target_root.join(name).display()
+                dest.display()
             )
         })?;
     }
     let version_src = extract_dir.join(VERSION_FILE_NAME);
     if version_src.exists() {
-        fs::copy(&version_src, &target_root.join(VERSION_FILE_NAME)).with_context(|| {
+        let dest = target_root.join(VERSION_FILE_NAME);
+        fs::copy(&version_src, &dest).with_context(|| {
             format!(
                 "Kon modelversie niet bijwerken vanuit {}",
                 version_src.display()
