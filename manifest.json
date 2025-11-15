@@ -1,0 +1,12 @@
+{
+  "app": {
+    "latest": "0.1.0",
+    "url": "https://github.com/kpauly/feeder-vision/releases/tag/v0.1.0"
+  },
+  "model": {
+    "latest": "model-v1.0.0",
+    "url": "https://github.com/kpauly/feeder-vision/releases/download/model-v1.0.0/Feedie_EfficientViT-m0_v1.0.0.zip",
+    "size_mb": 120.0,
+    "notes": "Eerste productieversie van het Feedie EfficientViT-m0 model"
+  }
+}

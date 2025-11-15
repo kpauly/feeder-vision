@@ -1,8 +1,9 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use arboard::Clipboard;
 use chrono::{DateTime, Local};
+use directories_next::ProjectDirs;
 use eframe::{App, Frame, NativeOptions, egui};
 use egui::viewport::{IconData, ViewportBuilder};
 use feeder_core::{
@@ -14,11 +15,14 @@ use semver::Version;
 use serde::Deserialize;
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant};
+use tempfile::tempdir;
+use zip::ZipArchive;
 
 fn main() {
     #[cfg(debug_assertions)]
@@ -143,6 +147,20 @@ impl Default for ManifestStatus {
     }
 }
 
+#[derive(Clone)]
+enum ModelDownloadStatus {
+    Idle,
+    Downloading,
+    Success(String),
+    Error(String),
+}
+
+impl Default for ModelDownloadStatus {
+    fn default() -> Self {
+        ModelDownloadStatus::Idle
+    }
+}
+
 struct UiApp {
     gekozen_map: Option<PathBuf>,
     rijen: Vec<ImageInfo>,
@@ -176,8 +194,11 @@ struct UiApp {
     coordinate_prompt: Option<CoordinatePrompt>,
     manifest_status: ManifestStatus,
     update_rx: Option<Receiver<Result<RemoteManifest, String>>>,
+    model_download_status: ModelDownloadStatus,
+    model_download_rx: Option<Receiver<Result<String, String>>>,
     app_version: String,
     model_version: String,
+    model_root: PathBuf,
     // Settings: Roboflow
     improve_recognition: bool,
     roboflow_dataset_input: String,
@@ -193,6 +214,8 @@ impl UiApp {
     }
 
     fn default_internal() -> Self {
+        let (model_root, model_version) = Self::prepare_model_dir();
+        let label_options = Self::load_label_options_from(&model_root.join("feeder-labels.csv"));
         let (upload_status_tx, upload_status_rx) = mpsc::channel();
         Self {
             gekozen_map: None,
@@ -217,7 +240,7 @@ impl UiApp {
             background_labels_input: "Achtergrond".to_string(),
             background_labels: vec!["achtergrond".to_string()],
             preview: None,
-            label_options: Self::load_label_options(),
+            label_options,
             new_label_buffer: String::new(),
             export_present: true,
             export_uncertain: false,
@@ -227,8 +250,11 @@ impl UiApp {
             coordinate_prompt: None,
             manifest_status: ManifestStatus::Idle,
             update_rx: None,
+            model_download_status: ModelDownloadStatus::Idle,
+            model_download_rx: None,
             app_version: env!("CARGO_PKG_VERSION").to_string(),
-            model_version: Self::load_model_version(),
+            model_version,
+            model_root,
             improve_recognition: false,
             roboflow_dataset_input: "voederhuiscamera".to_string(),
             upload_status_tx,
@@ -250,9 +276,11 @@ const MAX_THUMB_LOAD_PER_FRAME: usize = 12;
 const CARD_WIDTH: f32 = THUMB_SIZE as f32 + 40.0;
 const CARD_HEIGHT: f32 = THUMB_SIZE as f32 + 70.0;
 const ROBOFLOW_API_KEY: &str = "g9zfZxZVNuSr43ENZJMg";
-const MODEL_VERSION_PATH: &str = "models/model_version.txt";
 const MANIFEST_URL: &str =
     "https://raw.githubusercontent.com/kpauly/feeder-vision/main/manifest.json";
+const MODEL_FILE_NAME: &str = "feeder-efficientvit-m0.safetensors";
+const LABEL_FILE_NAME: &str = "feeder-labels.csv";
+const VERSION_FILE_NAME: &str = "model_version.txt";
 
 enum ScanMsg {
     Progress(usize, usize),     // scanned, total
@@ -622,6 +650,18 @@ impl UiApp {
         self.render_update_section(ui);
     }
 
+    fn model_file_path(&self) -> PathBuf {
+        self.model_root.join(MODEL_FILE_NAME)
+    }
+
+    fn labels_path(&self) -> PathBuf {
+        self.model_root.join(LABEL_FILE_NAME)
+    }
+
+    fn model_version_path(&self) -> PathBuf {
+        self.model_root.join(VERSION_FILE_NAME)
+    }
+
     fn render_update_section(&mut self, ui: &mut egui::Ui) {
         ui.add_space(8.0);
         ui.separator();
@@ -643,6 +683,7 @@ impl UiApp {
                 }
             }
             ManifestStatus::Ready(summary) => {
+                let summary = summary.clone();
                 if summary.app_update_available {
                     ui.colored_label(
                         egui::Color32::YELLOW,
@@ -668,15 +709,53 @@ impl UiApp {
                         ui.label(notes);
                     }
                     ui.hyperlink_to("Bekijk release", &summary.model_url);
-                    ui.label("Modelupdates kunnen nog niet automatisch worden gedownload.");
+                    self.render_model_download_actions(ui, &summary);
                 } else {
                     ui.label("Herkenningsmodel is up-to-date.");
+                    self.render_model_download_feedback(ui);
                 }
                 ui.add_space(6.0);
                 if ui.button("Opnieuw controleren").clicked() {
                     self.request_manifest_refresh();
                 }
             }
+        }
+    }
+
+    fn render_model_download_actions(&mut self, ui: &mut egui::Ui, summary: &UpdateSummary) {
+        match &self.model_download_status {
+            ModelDownloadStatus::Idle => {
+                if ui.button("Download en installeren").clicked() {
+                    self.start_model_download(summary);
+                }
+            }
+            ModelDownloadStatus::Downloading => {
+                ui.label("Modelupdate wordt gedownload...");
+            }
+            ModelDownloadStatus::Error(err) => {
+                ui.colored_label(egui::Color32::RED, err);
+                if ui.button("Opnieuw downloaden").clicked() {
+                    self.start_model_download(summary);
+                }
+            }
+            ModelDownloadStatus::Success(msg) => {
+                ui.colored_label(egui::Color32::GREEN, msg);
+                if ui.button("Download opnieuw").clicked() {
+                    self.start_model_download(summary);
+                }
+            }
+        }
+    }
+
+    fn render_model_download_feedback(&self, ui: &mut egui::Ui) {
+        match &self.model_download_status {
+            ModelDownloadStatus::Success(msg) => {
+                ui.colored_label(egui::Color32::GREEN, msg);
+            }
+            ModelDownloadStatus::Error(err) => {
+                ui.colored_label(egui::Color32::RED, err);
+            }
+            _ => {}
         }
     }
 
@@ -1080,6 +1159,8 @@ impl UiApp {
 
     fn classifier_config(&self) -> ClassifierConfig {
         ClassifierConfig {
+            model_path: self.model_file_path(),
+            labels_path: self.labels_path(),
             presence_threshold: self.pending_presence_threshold,
             batch_size: self.batch_size.max(1),
             background_labels: self.background_labels.clone(),
@@ -1094,6 +1175,7 @@ impl App for UiApp {
             self.status = msg;
         }
         self.poll_manifest_updates();
+        self.poll_model_download();
         // Drain scan messages first
         if let Some(rx) = self.rx.take() {
             let mut keep = true;
@@ -1208,9 +1290,8 @@ impl App for UiApp {
 }
 
 impl UiApp {
-    fn load_label_options() -> Vec<LabelOption> {
-        let path = PathBuf::from("models/feeder-labels.csv");
-        let Ok(content) = std::fs::read_to_string(&path) else {
+    fn load_label_options_from(path: &Path) -> Vec<LabelOption> {
+        let Ok(content) = std::fs::read_to_string(path) else {
             tracing::warn!(
                 "Kon labels niet laden uit {}: bestand ontbreekt of is onleesbaar",
                 path.display()
@@ -1248,21 +1329,33 @@ impl UiApp {
         options
     }
 
-    fn load_model_version() -> String {
-        match std::fs::read_to_string(MODEL_VERSION_PATH) {
-            Ok(content) => {
-                let trimmed = content.trim();
-                if trimmed.is_empty() {
-                    "onbekend".to_string()
-                } else {
-                    trimmed.to_string()
+    fn prepare_model_dir() -> (PathBuf, String) {
+        if let Some(proj_dirs) = ProjectDirs::from("nl", "Feedie", "Feedie") {
+            let models_dir = proj_dirs.data_dir().join("models");
+            match Self::ensure_models_present(&models_dir) {
+                Ok(()) => {
+                    let version = read_model_version_from(&models_dir.join(VERSION_FILE_NAME));
+                    return (models_dir, version);
+                }
+                Err(err) => {
+                    tracing::warn!("Kon modelmap niet voorbereiden in AppData: {err}");
                 }
             }
-            Err(err) => {
-                tracing::warn!("Kon modelversie niet lezen: {err}");
-                "onbekend".to_string()
-            }
         }
+        let bundled = bundled_models_dir();
+        let version = read_model_version_from(&bundled.join(VERSION_FILE_NAME));
+        (bundled, version)
+    }
+
+    fn ensure_models_present(target: &Path) -> anyhow::Result<()> {
+        if target.exists() {
+            return Ok(());
+        }
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("Kon map {} niet aanmaken", parent.display()))?;
+        }
+        copy_dir_recursive(&bundled_models_dir(), target)
     }
 
     fn request_manifest_refresh(&mut self) {
@@ -1306,7 +1399,52 @@ impl UiApp {
         };
         summary.app_update_available = version_is_newer(&manifest.app.latest, &self.app_version);
         summary.model_update_available = manifest.model.latest.trim() != self.model_version.trim();
+        if !summary.model_update_available {
+            self.model_download_status = ModelDownloadStatus::Idle;
+        }
         self.manifest_status = ManifestStatus::Ready(summary);
+    }
+
+    fn start_model_download(&mut self, summary: &UpdateSummary) {
+        if matches!(self.model_download_status, ModelDownloadStatus::Downloading) {
+            return;
+        }
+        let url = summary.model_url.clone();
+        let version = summary.latest_model.clone();
+        let target_root = self.model_root.clone();
+        let (tx, rx) = mpsc::channel();
+        self.model_download_rx = Some(rx);
+        self.model_download_status = ModelDownloadStatus::Downloading;
+        thread::spawn(move || {
+            let result = download_and_install_model(&url, &target_root, &version)
+                .map(|_| version.clone())
+                .map_err(|e| e.to_string());
+            let _ = tx.send(result);
+        });
+    }
+
+    fn poll_model_download(&mut self) {
+        if let Some(rx) = self.model_download_rx.take() {
+            match rx.try_recv() {
+                Ok(Ok(version)) => {
+                    self.model_download_status =
+                        ModelDownloadStatus::Success(format!("Model {version} geïnstalleerd."));
+                    self.model_version = read_model_version_from(&self.model_version_path());
+                    self.label_options = Self::load_label_options_from(&self.labels_path());
+                    self.request_manifest_refresh();
+                }
+                Ok(Err(err)) => {
+                    self.model_download_status = ModelDownloadStatus::Error(err);
+                }
+                Err(TryRecvError::Empty) => {
+                    self.model_download_rx = Some(rx);
+                }
+                Err(TryRecvError::Disconnected) => {
+                    self.model_download_status =
+                        ModelDownloadStatus::Error("Downloadkanaal verbroken".to_string());
+                }
+            }
+        }
     }
 
     fn render_context_menu(&mut self, ui: &mut egui::Ui, indices: &[usize]) {
@@ -1975,6 +2113,53 @@ fn load_app_icon() -> IconData {
     }
 }
 
+fn bundled_models_dir() -> PathBuf {
+    PathBuf::from("models")
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> anyhow::Result<()> {
+    if !src.exists() {
+        return Err(anyhow!("Bronmodelmap ontbreekt: {}", src.to_string_lossy()));
+    }
+    fs::create_dir_all(dst).with_context(|| format!("Kon map {} niet aanmaken", dst.display()))?;
+    for entry in
+        fs::read_dir(src).with_context(|| format!("{} kan niet worden gelezen", src.display()))?
+    {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        let dest_path = dst.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_recursive(&entry.path(), &dest_path)?;
+        } else if ty.is_file() {
+            fs::copy(entry.path(), &dest_path).with_context(|| {
+                format!(
+                    "Kopiëren van {} naar {} mislukt",
+                    entry.path().display(),
+                    dest_path.display()
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn read_model_version_from(path: &Path) -> String {
+    match std::fs::read_to_string(path) {
+        Ok(content) => {
+            let trimmed = content.trim();
+            if trimmed.is_empty() {
+                "onbekend".to_string()
+            } else {
+                trimmed.to_string()
+            }
+        }
+        Err(err) => {
+            tracing::warn!("Kon modelversie niet lezen uit {}: {err}", path.display());
+            "onbekend".to_string()
+        }
+    }
+}
+
 fn fallback_display_label(name: &str) -> String {
     let mut result = String::new();
     let mut capitalize = true;
@@ -2106,6 +2291,72 @@ fn fetch_remote_manifest() -> anyhow::Result<RemoteManifest> {
         .json::<RemoteManifest>()
         .context("Manifest kon niet worden geparseerd")?;
     Ok(manifest)
+}
+
+fn download_and_install_model(url: &str, target_root: &Path, version: &str) -> anyhow::Result<()> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(60))
+        .build()
+        .context("HTTP-client kon niet worden opgebouwd")?;
+    let mut response = client
+        .get(url)
+        .send()
+        .context("Modelupdate kon niet worden opgehaald")?
+        .error_for_status()
+        .context("Server gaf een foutstatus terug")?;
+    let temp_dir = tempdir().context("Kon tijdelijke map niet aanmaken")?;
+    let archive_path = temp_dir.path().join("model_update.zip");
+    {
+        let mut file =
+            fs::File::create(&archive_path).context("Kon tijdelijk downloadbestand niet openen")?;
+        io::copy(&mut response, &mut file).context("Download kon niet worden opgeslagen")?;
+    }
+    let extract_dir = temp_dir.path().join("extracted");
+    fs::create_dir_all(&extract_dir).context("Kon tijdelijke uitpakmap niet aanmaken")?;
+    let reader = fs::File::open(&archive_path).context("Kon gedownload bestand niet openen")?;
+    let mut archive = ZipArchive::new(reader).context("Modelupdate is geen geldig ZIP-bestand")?;
+    for i in 0..archive.len() {
+        let mut file = archive
+            .by_index(i)
+            .context("ZIP-bestand kon niet worden gelezen")?;
+        let outpath = extract_dir.join(file.mangled_name());
+        if file.name().ends_with('/') {
+            fs::create_dir_all(&outpath)?;
+        } else {
+            if let Some(parent) = outpath.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            let mut outfile = fs::File::create(&outpath)?;
+            io::copy(&mut file, &mut outfile)?;
+        }
+    }
+    fs::create_dir_all(target_root).context("Kon doelmap voor model niet aanmaken")?;
+    for name in [MODEL_FILE_NAME, LABEL_FILE_NAME] {
+        let src = extract_dir.join(name);
+        if !src.exists() {
+            return Err(anyhow!("Bestand {name} ontbreekt in modelupdate."));
+        }
+        fs::copy(&src, &target_root.join(name)).with_context(|| {
+            format!(
+                "Kopiëren van {} naar {} mislukt",
+                src.display(),
+                target_root.join(name).display()
+            )
+        })?;
+    }
+    let version_src = extract_dir.join(VERSION_FILE_NAME);
+    if version_src.exists() {
+        fs::copy(&version_src, &target_root.join(VERSION_FILE_NAME)).with_context(|| {
+            format!(
+                "Kon modelversie niet bijwerken vanuit {}",
+                version_src.display()
+            )
+        })?;
+    } else {
+        fs::write(target_root.join(VERSION_FILE_NAME), version)
+            .context("Kon modelversie niet opslaan")?;
+    }
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
