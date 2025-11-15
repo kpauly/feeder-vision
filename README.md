@@ -2,7 +2,7 @@
   <img src="assets/Feedie-banner.png" alt="Feedie banner" width="480">
 </div>
 
-# Feedie – Efficient bird detection for backyard cameras
+# Feedie – Efficient species detection for backyard feeder cameras
 
 [![Release](https://img.shields.io/github/v/release/kpauly/feeder-vision?display_name=tag&logo=github)](https://github.com/kpauly/feeder-vision/releases)
 [![Downloads](https://img.shields.io/github/downloads/kpauly/feeder-vision/total)](https://github.com/kpauly/feeder-vision/releases)
@@ -10,7 +10,7 @@
 [![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue)](https://polyformproject.org/licenses/noncommercial/1.0.0/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2011-blue?logo=windows)](https://github.com/kpauly/feeder-vision/releases)
 
-Feedie is a native Windows application that scans SD-card dumps or folders from your wildlife feeder camera, detects visitors with an EfficientViT model, and helps you export curated images and CSV reports. Everything runs locally—no cloud upload unless you explicitly opt in to sharing samples with Roboflow.
+Feedie is a native Windows application that scans SD-card dumps or folders from your wildlife feeder camera, detects visitors with an EfficientViT model, and helps you export curated images and CSV reports. Everything runs fast on CPU only and locally — no cloud upload unless you explicitly opt in to sharing samples with Roboflow. The entire app is targeted to non-tech savvy users, and only available in Dutch for the moment. Additional languages (starting with English) are planned.
 
 ---
 
