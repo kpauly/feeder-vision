@@ -1245,16 +1245,12 @@ impl App for UiApp {
                 }
             });
         });
-        egui::CentralPanel::default().show(ctx, |ui| {
-            match self.panel {
-                Panel::Folder => self.render_folder_panel(ui, ctx),
-                Panel::Results => self.render_results_panel(ui, ctx),
-                Panel::Export => self.render_export_panel(ui),
-                Panel::Settings => {
-                    egui::ScrollArea::vertical().show(ui, |ui| {
-                        self.render_settings_panel(ui)
-                    });
-                }
+        egui::CentralPanel::default().show(ctx, |ui| match self.panel {
+            Panel::Folder => self.render_folder_panel(ui, ctx),
+            Panel::Results => self.render_results_panel(ui, ctx),
+            Panel::Export => self.render_export_panel(ui),
+            Panel::Settings => {
+                egui::ScrollArea::vertical().show(ui, |ui| self.render_settings_panel(ui));
             }
         });
 
@@ -1389,7 +1385,9 @@ impl UiApp {
             ..Default::default()
         };
         summary.app_update_available = version_is_newer(&manifest.app.latest, &self.app_version);
-        summary.model_update_available = manifest.model.latest.trim() != self.model_version.trim();
+        let manifest_model_version = normalize_model_version(&manifest.model.latest);
+        summary.model_update_available =
+            manifest_model_version != normalize_model_version(&self.model_version);
         if !summary.model_update_available {
             self.model_download_status = ModelDownloadStatus::Idle;
         }
@@ -1418,8 +1416,9 @@ impl UiApp {
         if let Some(rx) = self.model_download_rx.take() {
             match rx.try_recv() {
                 Ok(Ok(version)) => {
+                    let normalized = normalize_model_version(&version);
                     self.model_download_status =
-                        ModelDownloadStatus::Success(format!("Model {version} geïnstalleerd."));
+                        ModelDownloadStatus::Success(format!("Model {normalized} geïnstalleerd."));
                     self.model_version = read_model_version_from(&self.model_version_path());
                     self.label_options = Self::load_label_options_from(&self.labels_path());
                     self.request_manifest_refresh();
@@ -2137,11 +2136,11 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> anyhow::Result<()> {
 fn read_model_version_from(path: &Path) -> String {
     match std::fs::read_to_string(path) {
         Ok(content) => {
-            let trimmed = content.trim();
-            if trimmed.is_empty() {
+            let normalized = normalize_model_version(content.trim());
+            if normalized.is_empty() {
                 "onbekend".to_string()
             } else {
-                trimmed.to_string()
+                normalized
             }
         }
         Err(err) => {
@@ -2175,6 +2174,19 @@ fn version_is_newer(latest: &str, current: &str) -> bool {
         (Ok(lat), Ok(curr)) => lat > curr,
         _ => latest != current,
     }
+}
+
+fn normalize_model_version(value: &str) -> String {
+    let trimmed = value.trim();
+    let without_prefix = trimmed
+        .strip_prefix("model-")
+        .or_else(|| trimmed.strip_prefix("MODEL-"))
+        .unwrap_or(trimmed);
+    let without_v = without_prefix
+        .strip_prefix('v')
+        .or_else(|| without_prefix.strip_prefix('V'))
+        .unwrap_or(without_prefix);
+    without_v.to_string()
 }
 
 fn sanitize_for_path(input: &str) -> String {
