@@ -1,5 +1,6 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+use arboard::Clipboard;
 use chrono::{DateTime, Local};
 use eframe::{App, Frame, NativeOptions, egui};
 use feeder_core::{
@@ -1186,7 +1187,7 @@ impl UiApp {
         );
         ui.checkbox(
             &mut self.export_background,
-            "Exporteer foto's met enkel achtergrond",
+            "Exporteer foto's uit Leeg (achtergrond)",
         );
         let csv_checkbox = ui.checkbox(
             &mut self.export_csv,
@@ -1305,15 +1306,29 @@ impl UiApp {
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .open(&mut open)
                 .show(ctx, |ui| {
-                    ui.label("Plak hier de Google Maps coördinaten:");
-                    let response = ui.add(
-                        egui::TextEdit::singleline(&mut prompt.input)
-                            .desired_width(260.0)
-                            .hint_text("51.376318769269716, 4.456974517090091"),
-                    );
+                ui.label("Plak hier de Google Maps coördinaten:");
+                let response = ui.add(
+                    egui::TextEdit::singleline(&mut prompt.input)
+                        .desired_width(260.0)
+                        .hint_text("51.376318769269716, 4.456974517090091"),
+                );
+                response.context_menu(|ui| {
+                    if ui.button("Plakken").clicked() {
+                        match Clipboard::new().and_then(|mut cb| cb.get_text()) {
+                            Ok(text) => {
+                                prompt.input = text;
+                                prompt.error = None;
+                            }
+                            Err(err) => {
+                                prompt.error = Some(format!("Plakken mislukt: {err}"));
+                            }
+                        }
+                        ui.close();
+                    }
+                });
 
-                    ui.add_space(6.0);
-                    ui.horizontal_wrapped(|ui| {
+                ui.add_space(6.0);
+                ui.horizontal_wrapped(|ui| {
                         ui.label("Tip: open ");
                         ui.hyperlink_to("Google Maps", "https://maps.google.com");
                         ui.label(
@@ -1495,6 +1510,10 @@ impl UiApp {
             target_dir,
             options,
         } = pending;
+        if options.include_csv && coords.is_none() {
+            return Err(anyhow!("Coördinaten ontbreken voor CSV-export"));
+        }
+
         let jobs = self.collect_export_jobs(&options);
         if jobs.is_empty() && !options.include_csv {
             return Err(anyhow!("Geen bestanden voldeden aan de huidige selectie."));
@@ -1502,6 +1521,7 @@ impl UiApp {
 
         let mut copied = 0usize;
         let mut csv_records: Vec<CsvRecord> = Vec::new();
+        let export_time = Local::now();
 
         for job in jobs {
             let folder_name = sanitize_for_path(&job.folder_label);
@@ -1533,7 +1553,6 @@ impl UiApp {
             })?;
 
             if job.include_in_csv {
-                coords.ok_or_else(|| anyhow!("Coördinaten ontbreken voor CSV-export"))?;
                 let (date, time) = extract_timestamp(&job.source)?;
                 let canonical = job
                     .canonical_label
@@ -1555,8 +1574,8 @@ impl UiApp {
         }
 
         if options.include_csv {
-            let coords = coords.ok_or_else(|| anyhow!("Coördinaten ontbreken voor CSV-export"))?;
-            write_export_csv(&target_dir, &csv_records, coords)?;
+            let coords = coords.unwrap();
+            write_export_csv(&target_dir, &csv_records, coords, export_time)?;
         }
 
         Ok(ExportOutcome {
@@ -1587,10 +1606,10 @@ impl UiApp {
                     include_in_csv: false,
                 });
             }
-            if options.include_background && self.is_background_only(info) {
+            if options.include_background && self.belongs_in_leeg(info) {
                 jobs.push(ExportJob {
                     source: info.file.clone(),
-                    folder_label: "Achtergrond".to_string(),
+                    folder_label: "Leeg".to_string(),
                     canonical_label: None,
                     include_in_csv: false,
                 });
@@ -1603,7 +1622,7 @@ impl UiApp {
         let classification = info.classification.as_ref()?;
         if let Decision::Label(name) = &classification.decision {
             let canonical = canonical_label(name);
-            if self.is_background_label(&canonical) {
+            if self.is_background_label(&canonical) || canonical == "iets sp" {
                 return None;
             }
             let display = self.display_for(&canonical);
@@ -1612,17 +1631,8 @@ impl UiApp {
         None
     }
 
-    fn is_background_only(&self, info: &ImageInfo) -> bool {
-        let Some(classification) = &info.classification else {
-            return false;
-        };
-        match &classification.decision {
-            Decision::Label(name) => {
-                let canonical = canonical_label(name);
-                self.is_background_label(&canonical)
-            }
-            Decision::Unknown => false,
-        }
+    fn belongs_in_leeg(&self, info: &ImageInfo) -> bool {
+        !info.present && !self.is_onzeker(info)
     }
 
     fn scientific_for(&self, canonical: &str) -> Option<String> {
@@ -1796,7 +1806,7 @@ fn next_available_export_path(base_dir: &Path, base: &str, ext: &str) -> PathBuf
         let filename = if attempt == 0 {
             format!("{base}.{ext}")
         } else {
-            format!("{base}_{attempt}.{ext}")
+            format!("{base} ({}).{ext}", attempt + 1)
         };
         let candidate = base_dir.join(&filename);
         if !candidate.exists() {
@@ -1825,10 +1835,12 @@ fn write_export_csv(
     dir: &Path,
     records: &[CsvRecord],
     coords: (f64, f64),
+    export_time: DateTime<Local>,
 ) -> anyhow::Result<PathBuf> {
     use anyhow::Context;
 
-    let csv_path = dir.join("feeder_vision.csv");
+    let base = format!("voederhuiscamera_{}", export_time.format("%y%m%d%H%M"));
+    let csv_path = next_available_export_path(dir, &base, "csv");
     let mut writer = csv::Writer::from_path(&csv_path)
         .with_context(|| format!("Kon CSV-bestand {} niet openen", csv_path.display()))?;
     writer.write_record(["date", "time", "scientific name", "lat", "lng", "path"])?;
