@@ -1,3 +1,27 @@
+//! # feeder_core
+//!
+//! `feeder_core` exposes the building blocks for scanning folders, running the
+//! EfficientViT classifier, and exporting CSV data. This crate is kept UI-free
+//! so both the GUI and any future CLI or service can reuse the same inference
+//! pipeline.
+//!
+//! ## Examples
+//!
+//! ```no_run
+//! use feeder_core::{scan_folder, EfficientVitClassifier, ClassifierConfig};
+//!
+//! # fn run() -> anyhow::Result<()> {
+//! let rows = scan_folder("/path/to/images")?;
+//! let config = ClassifierConfig::default();
+//! let mut classifier = EfficientVitClassifier::new(&config)?;
+//! classifier.classify_with_progress(&mut rows.clone(), |done, total| {
+//!     println!("{done}/{total}");
+//! })?;
+//! # Ok(())
+//! # }
+//! # run().unwrap();
+//! ```
+
 use anyhow::Result;
 use candle_core::{Device, Tensor};
 use image::{DynamicImage, imageops::FilterType};
@@ -8,6 +32,8 @@ use walkdir::WalkDir;
 pub use classifier::{ClassifierConfig, EfficientVitClassifier, EfficientVitVariant};
 
 /// Classification decision for an image/crop.
+///
+/// This is used throughout the pipeline to describe the classifier outcome.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Decision {
     Unknown,
@@ -15,6 +41,8 @@ pub enum Decision {
 }
 
 /// Classification result with decision and confidence.
+///
+/// Instances appear in [`ImageInfo::classification`] when a decision was made.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Classification {
     pub decision: Decision,
@@ -22,14 +50,21 @@ pub struct Classification {
 }
 
 /// Core image information gathered by the pipeline.
+///
+/// The GUI consumes this type directly to drive previews and exports.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ImageInfo {
+    /// Absolute path to the file on disk.
     pub file: PathBuf,
+    /// Whether the classifier believes a species is present.
     pub present: bool,
+    /// Optional classifier output with decision and confidence.
     pub classification: Option<Classification>,
 }
 
 /// Options controlling how folder scanning behaves.
+///
+/// `scan_folder_with` reads these to decide whether to recurse.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScanOptions {
     /// When true, scan subdirectories recursively.
@@ -37,11 +72,38 @@ pub struct ScanOptions {
 }
 
 /// Scan a folder for images and produce basic `ImageInfo` entries.
+///
+/// This is a convenience wrapper around [`scan_folder_with`] using default
+/// options. It filters files by extension and does not recurse by default.
+///
+/// # Errors
+///
+/// Returns an error if the path does not exist or is not a directory.
+///
+/// # Examples
+///
+/// ```no_run
+/// let infos = feeder_core::scan_folder("/data/camera")?;
+/// println!("{} frames discovered", infos.len());
+/// # Ok::<_, anyhow::Error>(())
+/// ```
 pub fn scan_folder(path: impl AsRef<Path>) -> Result<Vec<ImageInfo>> {
     scan_folder_with(path, ScanOptions::default())
 }
 
 /// Scan a folder with options.
+///
+/// # Errors
+///
+/// Returns an error when the path is missing or not a directory.
+///
+/// # Examples
+///
+/// ```no_run
+/// use feeder_core::{scan_folder_with, ScanOptions};
+/// let infos = scan_folder_with("/data/camera", ScanOptions { recursive: true })?;
+/// # Ok::<_, anyhow::Error>(())
+/// ```
 pub fn scan_folder_with(path: impl AsRef<Path>, opts: ScanOptions) -> Result<Vec<ImageInfo>> {
     let root = path.as_ref();
     if !root.exists() {
@@ -82,8 +144,28 @@ pub fn scan_folder_with(path: impl AsRef<Path>, opts: ScanOptions) -> Result<Vec
     Ok(infos)
 }
 
-/// Export the provided rows to CSV with headers:
-/// file,present,species,confidence
+/// Export the provided rows to CSV with headers `file,present,species,confidence`.
+///
+/// # Errors
+///
+/// Returns any I/O or serialization errors encountered while writing the CSV.
+///
+/// # Examples
+///
+/// ```no_run
+/// # use feeder_core::{ImageInfo, export_csv, Decision, Classification};
+/// # use std::path::PathBuf;
+/// let rows = vec![ImageInfo {
+///     file: PathBuf::from("/tmp/frame.jpg"),
+///     present: true,
+///     classification: Some(Classification {
+///         decision: Decision::Label("koolmees".into()),
+///         confidence: 0.92,
+///     }),
+/// }];
+/// export_csv(&rows, "/tmp/results.csv")?;
+/// # Ok::<_, anyhow::Error>(())
+/// ```
 pub fn export_csv(rows: &[ImageInfo], path: impl AsRef<Path>) -> Result<()> {
     let mut wtr = csv::Writer::from_path(path)?;
     wtr.write_record(["file", "present", "species", "confidence"])?;
@@ -124,6 +206,7 @@ pub fn export_csv(rows: &[ImageInfo], path: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
+/// Returns true when the file extension is supported by the classifier.
 fn is_supported_image(path: &Path) -> bool {
     match path.extension().and_then(|s| s.to_str()) {
         Some(ext) => {
@@ -134,11 +217,31 @@ fn is_supported_image(path: &Path) -> bool {
     }
 }
 
+/// Resizes an image to a fixed square while preserving aspect ratio via padding.
 fn resize_to_square(img: DynamicImage, size: u32) -> DynamicImage {
     img.resize_exact(size, size, FilterType::Triangle)
 }
 
 /// Convert an image file into a normalized tensor (CHW) on the provided device.
+///
+/// # Errors
+///
+/// Returns an error when the file cannot be decoded or tensor creation fails.
+///
+/// # Examples
+///
+/// ```no_run
+/// # use candle_core::Device;
+/// let tensor = feeder_core::load_image_tensor(
+///     std::path::Path::new("/tmp/frame.jpg"),
+///     224,
+///     [0.485, 0.456, 0.406],
+///     [0.229, 0.224, 0.225],
+///     &Device::Cpu,
+/// )?;
+/// assert_eq!(tensor.dims(), &[3, 224, 224]);
+/// # Ok::<_, anyhow::Error>(())
+/// ```
 pub fn load_image_tensor(
     path: &Path,
     size: u32,
@@ -151,6 +254,7 @@ pub fn load_image_tensor(
     Ok(tensor)
 }
 
+/// Internal helper that loads the pixel data and normalizes channels.
 fn load_image_tensor_data(
     path: &Path,
     size: u32,
@@ -170,11 +274,13 @@ fn load_image_tensor_data(
     Ok(data)
 }
 
+/// Normalizes a single channel given ImageNet mean/std parameters.
 fn normalize_channel(value: u8, mean: f32, std: f32) -> f32 {
     let v = value as f32 / 255.0;
     (v - mean) / std
 }
 
+/// EfficientViT classifier implementation and configuration helpers.
 mod classifier {
     use super::{Classification, Decision, ImageInfo, load_image_tensor_data};
     use anyhow::{Context, Result};
@@ -187,6 +293,7 @@ mod classifier {
     use std::fs;
     use std::path::PathBuf;
 
+    /// Enumerates the EfficientViT variants this crate knows about.
     #[derive(Debug, Clone, Copy, Default)]
     pub enum EfficientVitVariant {
         #[default]
@@ -199,6 +306,7 @@ mod classifier {
     }
 
     impl EfficientVitVariant {
+        /// Returns the canonical transformer configuration for this variant.
         pub fn config(&self) -> EfficientVitConfig {
             match self {
                 Self::M0 => EfficientVitConfig::m0(),
@@ -213,15 +321,28 @@ mod classifier {
 
     /// Configuration for the Candle-based EfficientViT classifier.
     #[derive(Debug, Clone)]
+    /// Configuration used to build an [`EfficientVitClassifier`].
+    ///
+    /// Values default to the bundled EfficientViT-M0 settings but can be tweaked
+    /// when running custom models or different batching strategies.
     pub struct ClassifierConfig {
+        /// Path to the `.safetensors` model to load.
         pub model_path: PathBuf,
+        /// Path to the CSV file that lists labels in order.
         pub labels_path: PathBuf,
+        /// EfficientViT variant describing the architecture; affects the config.
         pub variant: EfficientVitVariant,
+        /// Width/height of the resized square input.
         pub input_size: u32,
+        /// Threshold above which detections count as “present”.
         pub presence_threshold: f32,
+        /// Mean normalization per channel (RGB order).
         pub mean: [f32; 3],
+        /// Std deviation normalization per channel (RGB order).
         pub std: [f32; 3],
+        /// Canonical labels that should be treated as background.
         pub background_labels: Vec<String>,
+        /// Number of images to classify per batch.
         pub batch_size: usize,
     }
 
@@ -241,6 +362,11 @@ mod classifier {
         }
     }
 
+    /// High-level wrapper around the EfficientViT model used to classify images.
+    ///
+    /// This struct owns the loaded model, label list, and normalization values.
+    /// Call [`EfficientVitClassifier::classify_with_progress`] to mutate
+    /// [`ImageInfo`] entries with predictions.
     pub struct EfficientVitClassifier {
         model: Func<'static>,
         device: Device,
@@ -254,6 +380,12 @@ mod classifier {
     }
 
     impl EfficientVitClassifier {
+        /// Loads the model weights, labels, and normalization settings.
+        ///
+        /// # Errors
+        ///
+        /// Returns an error when the model or label files are missing or cannot
+        /// be parsed, or when the underlying tensors fail to load on the device.
         pub fn new(cfg: &ClassifierConfig) -> Result<Self> {
             if !cfg.model_path.exists() {
                 anyhow::bail!(
@@ -317,6 +449,14 @@ mod classifier {
             })
         }
 
+        /// Classifies the provided rows in batches and reports progress.
+        ///
+        /// `rows` are updated in-place based on the classifier output. The
+        /// callback receives `(done, total)` after each processed batch.
+        ///
+        /// # Errors
+        ///
+        /// Returns an error if tensor creation or model evaluation fails.
         pub fn classify_with_progress<F>(
             &self,
             rows: &mut [ImageInfo],
