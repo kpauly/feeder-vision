@@ -2,7 +2,7 @@
 
 use crate::export::{CoordinatePrompt, PendingExport};
 use crate::manifest::{ManifestStatus, ModelDownloadStatus};
-use eframe::{egui, App, Frame};
+use eframe::{App, Frame, egui};
 use feeder_core::ImageInfo;
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::path::PathBuf;
