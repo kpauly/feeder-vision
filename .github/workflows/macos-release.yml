@@ -1,0 +1,69 @@
+name: macOS Universal Build
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    runs-on: macos-13
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Add macOS targets
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: macos-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run CI checks
+        run: pwsh ./scripts/ci.ps1
+
+      - name: Build release binaries
+        run: |
+            cargo build --release --target aarch64-apple-darwin -p app_gui
+            cargo build --release --target x86_64-apple-darwin -p app_gui
+
+      - name: Create universal binary
+        run: |
+          mkdir -p target/universal/release
+          lipo \
+            target/aarch64-apple-darwin/release/app_gui \
+            target/x86_64-apple-darwin/release/app_gui \
+            -create \
+            -output target/universal/release/Feedie
+
+      - name: Install cargo-bundle
+        run: cargo install cargo-bundle --locked
+
+      - name: Bundle Feedie.app
+        run: |
+          cargo bundle --release --target aarch64-apple-darwin -p app_gui
+          cp target/universal/release/Feedie \
+            target/aarch64-apple-darwin/release/bundle/osx/Feedie.app/Contents/MacOS/Feedie
+
+      - name: Package unsigned app
+        run: |
+          cd target/aarch64-apple-darwin/release/bundle/osx
+          ditto -c -k --keepParent Feedie.app Feedie-mac.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Feedie-mac
+          path: target/aarch64-apple-darwin/release/bundle/osx/Feedie-mac.zip

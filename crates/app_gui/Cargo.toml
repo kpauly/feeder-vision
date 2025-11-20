@@ -26,3 +26,17 @@ tempfile = "3.23.0"
 
 [dev-dependencies]
 rstest = "0.26.1"
+
+[package.metadata.bundle]
+name = "Feedie"
+identifier = "nl.feedie.app"
+version = "1.0.0"
+short_description = "Efficiënte triage voor voederhuiscamera's"
+copyright = "Copyright (c) 2025 Klaas"
+resources = [
+    "models",
+    "manifest.json",
+    "assets/Feedie-banner.png",
+]
+icon = ["assets/Feedie.icns"]
+category = "public.app-category.photography"
