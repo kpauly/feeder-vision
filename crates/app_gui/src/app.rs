@@ -2,7 +2,7 @@
 
 use crate::export::{CoordinatePrompt, PendingExport};
 use crate::manifest::{ManifestStatus, ModelDownloadStatus};
-use eframe::{App, Frame, egui};
+use eframe::{egui, App, Frame};
 use feeder_core::ImageInfo;
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::path::PathBuf;
@@ -153,7 +153,7 @@ impl UiApp {
             update_rx: None,
             model_download_status: ModelDownloadStatus::Idle,
             model_download_rx: None,
-            app_version: env!("CARGO_PKG_VERSION").to_string(),
+            app_version: env!("FEEDIE_VERSION").to_string(),
             model_version,
             model_root,
             improve_recognition: false,

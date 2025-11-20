@@ -14,6 +14,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Determine version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME:-0.0.0-dev}"
+          if [[ -z "$version" ]]; then
+            version="0.0.0-dev"
+          fi
+          if [[ "$version" == v* ]]; then
+            version="${version:1}"
+          fi
+          if [[ -z "$version" ]]; then
+            version="0.0.0-dev"
+          fi
+          echo "FEEDIE_VERSION=$version" >> "$GITHUB_ENV"
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -35,9 +50,11 @@ jobs:
         run: pwsh ./scripts/ci.ps1
 
       - name: Build release binaries
+        env:
+          FEEDIE_VERSION: ${{ env.FEEDIE_VERSION }}
         run: |
-            cargo build --release --target aarch64-apple-darwin -p app_gui
-            cargo build --release --target x86_64-apple-darwin -p app_gui
+          cargo build --release --target aarch64-apple-darwin -p app_gui
+          cargo build --release --target x86_64-apple-darwin -p app_gui
 
       - name: Create universal binary
         run: |
@@ -52,6 +69,8 @@ jobs:
         run: cargo install cargo-bundle --locked
 
       - name: Bundle Feedie.app
+        env:
+          FEEDIE_VERSION: ${{ env.FEEDIE_VERSION }}
         run: |
           cargo bundle --release --target aarch64-apple-darwin -p app_gui
           cp target/universal/release/Feedie \
@@ -61,9 +80,10 @@ jobs:
         run: |
           cd target/aarch64-apple-darwin/release/bundle/osx
           ditto -c -k --keepParent Feedie.app Feedie-mac.zip
+          mv Feedie-mac.zip Feedie-mac-${FEEDIE_VERSION}.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Feedie-mac
-          path: target/aarch64-apple-darwin/release/bundle/osx/Feedie-mac.zip
+          name: Feedie-mac-${{ env.FEEDIE_VERSION }}
+          path: target/aarch64-apple-darwin/release/bundle/osx/Feedie-mac-${{ env.FEEDIE_VERSION }}.zip
