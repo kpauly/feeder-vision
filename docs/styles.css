@@ -212,10 +212,12 @@ main {
 }
 
 .usage-steps {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    display: flex;
     gap: 1.5rem;
     margin-top: 2rem;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 1rem;
 }
 
 .usage-steps article {
@@ -225,6 +227,8 @@ main {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+    min-width: 260px;
+    scroll-snap-align: start;
 }
 
 footer {
