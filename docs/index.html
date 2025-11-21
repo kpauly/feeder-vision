@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="nl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Feedie – Vogels herkennen met één klik</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="hero" id="home">
+      <nav class="nav">
+        <div class="logo">
+          <img src="assets/feedie-icon.png" alt="Feedie icoon" />
+          <span>Feedie</span>
+        </div>
+        <div class="nav-links">
+          <a href="#about">Over Feedie</a>
+          <a href="#download">Download</a>
+          <a href="#usage">Zo werkt het</a>
+          <a href="#license">Licentie</a>
+        </div>
+      </nav>
+      <div class="hero-content">
+        <div class="hero-text">
+          <p class="eyebrow">Slim sorteren, meer tijd om te genieten</p>
+          <h1>Haal het beste uit je voederhuiscamera</h1>
+          <p>
+            Feedie is een lichte Windows- en Mac-app in het Nederlands. In een
+            paar klikken scan je hele SD-kaarten, zie je direct welke bezoekers
+            langskwamen en exporteer je de mooiste foto’s.
+          </p>
+          <div class="cta-group">
+            <a class="cta" id="download-windows" href="https://github.com/kpauly/feeder-vision/releases" target="_blank" rel="noopener">
+              Download voor Windows
+            </a>
+            <a class="cta ghost" id="download-mac" href="https://github.com/kpauly/feeder-vision/releases" target="_blank" rel="noopener">
+              Download voor macOS
+            </a>
+          </div>
+          <p class="version" id="release-label">Laatste versie wordt opgehaald…</p>
+        </div>
+        <div class="hero-image">
+          <img src="assets/feedie-icon.png" alt="Feedie app pictogram" />
+        </div>
+      </div>
+    </header>
+    <main>
+      <section id="about" class="section about">
+        <div class="section-heading">
+          <span>Over Feedie</span>
+          <h2>Een handige assistent voor tuinvogelcamera’s</h2>
+        </div>
+        <p>
+          Veel voederhuiscamera’s leveren honderden foto’s zonder hulpmiddel om
+          de beelden te sorteren. Feedie is gebouwd voor gezinnen, scholen en
+          natuurliefhebbers die gewoon een laptop hebben en snel willen zien wie
+          er op bezoek kwam. De app draait volledig lokaal, vraagt geen cloud
+          account en houdt alles overzichtelijk met duidelijke tabbladen.
+        </p>
+        <ul class="feature-list">
+          <li>Herkenning op CPU – werkt zelfs op eenvoudige laptops.</li>
+          <li>
+            Automatisch groeperen in <em>Aanwezig</em>, <em>Leeg</em> en
+            <em>Onzeker</em>.
+          </li>
+          <li>Exporteer foto’s en CSV’s die klaar zijn voor observation.org.</li>
+          <li>Optionele Roboflow-upload voor wie modellen wil verbeteren.</li>
+        </ul>
+      </section>
+
+      <section id="background" class="section split">
+        <div class="split-text">
+          <span>Achtergrond & motivatie</span>
+          <h2>Ontstaan uit frustratie met trage, technische tools</h2>
+          <p>
+            Tijdens de zoektocht naar software voor de Denver- en vergelijkbare
+            camera’s bleek dat bestaande pakketten ingewikkeld zijn, vaak geen
+            Nederlands ondersteunen en veel geheugen vragen. Feedie pakt dit
+            anders aan: kleine installatie, supersnel op CPU en afgestemd op de
+            vogelsoorten in België en Nederland. Zo besteed je minder tijd aan
+            filteren en meer tijd aan het bewonderen van je tuinbezoekers.
+          </p>
+        </div>
+        <div class="split-media">
+          <img src="assets/screenshot-fotomap.png" alt="Overzicht van gevonden foto’s in Feedie" />
+        </div>
+      </section>
+
+      <section id="download" class="section download">
+        <div class="section-heading">
+          <span>Download & installatie</span>
+          <h2>Stap voor stap aan de slag</h2>
+        </div>
+        <div class="download-grid">
+          <div>
+            <h3>Windows</h3>
+            <ol>
+              <li>Download het installatiebestand via de knop hierboven.</li>
+              <li>Dubbelklik op <strong>FeedieSetup-…​.exe</strong>.</li>
+              <li>
+                Bevestig de beveiligingsmelding (onbekende uitgever) en volg de
+                korte wizard.
+              </li>
+              <li>Vind Feedie terug in het Startmenu.</li>
+            </ol>
+          </div>
+          <div>
+            <h3>macOS</h3>
+            <ol>
+              <li>Download de <strong>Feedie-mac-…​.zip</strong>.</li>
+              <li>Open de zip en sleep <strong>Feedie.app</strong> naar <em>Programma’s</em>.</li>
+              <li>Open Feedie via Launchpad en kies “Open” bij de eerste waarschuwing.</li>
+            </ol>
+          </div>
+        </div>
+        <p>
+          Bij de eerste start kopieert Feedie automatisch het meegeleverde model
+          naar jouw profiel. Je hoeft geen account te maken en kunt direct
+          scannen zonder internet.
+        </p>
+      </section>
+
+      <section id="usage" class="section usage">
+        <div class="section-heading">
+          <span>Zo werkt het</span>
+          <h2>Van SD-kaart naar keurige vogelcollectie</h2>
+        </div>
+        <div class="usage-steps">
+          <article>
+            <img src="assets/screenshot-fotomap.png" alt="Fotomap kiezen" />
+            <h3>1. Kies je fotomap</h3>
+            <p>Selecteer de map van je SD-kaart en druk op “Scannen”. Feedie telt alle bestanden en start direct.</p>
+          </article>
+          <article>
+            <img src="assets/screenshot-galleries.png" alt="Resultaten in galerijen" />
+            <h3>2. Blader door galerijen</h3>
+            <p>Gebruik de tabbladen <em>Aanwezig</em>, <em>Leeg</em> en <em>Onzeker</em> om snel te beoordelen.</p>
+          </article>
+          <article>
+            <img src="assets/screenshot-filters.png" alt="Labels en filters" />
+            <h3>3. Label en verbeter</h3>
+            <p>Pas labels aan, markeer achtergronden en deel optioneel voorbeelden voor modelverbetering.</p>
+          </article>
+          <article>
+            <img src="assets/screenshot-export.png" alt="Exporteren dialoog" />
+            <h3>4. Exporteer alles netjes</h3>
+            <p>Maak soortmappen, bundel alle Onzeker/Leeg-foto’s of exporteer een CSV klaar voor observation.org.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="license" class="section license">
+        <div class="section-heading">
+          <span>Licentie</span>
+          <h2>Vrij te gebruiken voor niet-commercieel gebruik</h2>
+        </div>
+        <p>
+          Feedie wordt verspreid onder de PolyForm Noncommercial License 1.0.0.
+          Je mag de app gratis gebruiken en aanpassen voor persoonlijk of
+          educatief gebruik. Wil je Feedie commercieel inzetten? Neem dan
+          contact op via GitHub voor een passende licentie.
+        </p>
+      </section>
+    </main>
+    <footer>
+      <p>
+        © <span id="current-year"></span> Feedie — gebouwd met liefde voor
+        tuinvogels.
+      </p>
+      <a href="https://github.com/kpauly/feeder-vision" target="_blank" rel="noopener">
+        Bekijk de broncode op GitHub
+      </a>
+    </footer>
+    <script src="script.js"></script>
+  </body>
+</html>
