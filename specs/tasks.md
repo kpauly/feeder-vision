@@ -26,7 +26,7 @@
 - [x] **C3. Model training pipeline**
   - [x] Load Roboflow `_classes.csv` splits (train/valid/test) into `DatasetSplit`
   - [x] Training scripts available:
-    - Google Colab notebook `models/feeder-vision_EfficientViT-training.ipynb` for GPU fine-tuning EfficientViT
+    - Google Colab notebook `models/feedie_EfficientViT-training.ipynb` for GPU fine-tuning EfficientViT
   - [x] Export `.safetensors` + label CSV + Colab notebook under `/models`
 - [x] **C4. Cropping / preprocessing**
   - [x] Confirm 224×224 pipeline; pad/resize helper for inference + training reuse

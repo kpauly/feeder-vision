@@ -185,8 +185,7 @@ pub(crate) const CARD_HEIGHT: f32 = THUMB_SIZE as f32 + 70.0;
 /// Built-in Roboflow API key for optional uploads.
 pub(crate) const ROBOFLOW_API_KEY: &str = "g9zfZxZVNuSr43ENZJMg";
 /// Remote manifest location that describes available updates.
-pub(crate) const MANIFEST_URL: &str =
-    "https://github.com/kpauly/feeder-vision/raw/main/manifest.json";
+pub(crate) const MANIFEST_URL: &str = "https://github.com/kpauly/feedie/raw/main/manifest.json";
 /// Name of the bundled EfficientViT model weights.
 pub(crate) const MODEL_FILE_NAME: &str = "feeder-efficientvit-m0.safetensors";
 /// Name of the CSV file containing labels.

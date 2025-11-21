@@ -2,7 +2,7 @@ const releaseLabel = document.getElementById("release-label");
 const windowsBtn = document.getElementById("download-windows");
 const macBtn = document.getElementById("download-mac");
 const RELEASE_API =
-  "https://api.github.com/repos/kpauly/feeder-vision/releases/latest";
+  "https://api.github.com/repos/kpauly/feedie/releases/latest";
 
 async function loadRelease() {
   try {
@@ -36,7 +36,8 @@ async function loadRelease() {
   }
 }
 
-document.getElementById("current-year").textContent =
-  new Date().getFullYear().toString();
+document.getElementById("current-year").textContent = new Date()
+  .getFullYear()
+  .toString();
 
 loadRelease();

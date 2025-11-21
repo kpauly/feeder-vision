@@ -6,7 +6,7 @@ Users point to a feeder camera SD card dump folder with thousands of frames; the
 ## Scope v0
 - Single-stage **EfficientViT-m0** classifier (Candle) runs on every frame: resize to 224x224, normalize, batch tensors (default 8) and infer `present` + species directly on CPU.
 - Model weights (`feeder-efficientvit-m0.safetensors`) and label CSV (`feeder-labels.csv`) ship with the app under `/models`; users do not need Roboflow/online access.
-- Training happens offline from the Roboflow-exported dataset (train/valid/test CSVs) using the Colab notebook (`models/feeder-vision_EfficientViT-training.ipynb`). Updated checkpoints can be dropped into `/models` at any time.
+- Training happens offline from the Roboflow-exported dataset (train/valid/test CSVs) using the Colab notebook (`models/feedie_EfficientViT-training.ipynb`). Updated checkpoints can be dropped into `/models` at any time.
 - Open-set behavior relies on classifier confidence plus background classes (probability < T_min or predicted label "background" -> "Unknown").
 - Opt-in data sharing: via Instellingen users can enable "Help de herkenning te verbeteren", which uploads manually re-categorised frames in the background to the Roboflow project without blocking the UI.
 
@@ -23,7 +23,7 @@ Users point to a feeder camera SD card dump folder with thousands of frames; the
 
 ## Model training & dataset
 - Roboflow export (`Voederhuiscamera.v2i.multiclass/{train,valid,test}`) is the canonical dataset. Each split contains `_classes.csv` (one-hot labels) and preprocessed 512x512 JPGs.
-- Training is performed in Google Colab (GPU) using the `feeder-vision_EfficientViT-training.ipynb` notebook; results (best `.safetensors` + labels + metrics) are copied back into `/models`.
+- Training is performed in Google Colab (GPU) using the `feedie_EfficientViT-training.ipynb` notebook; results (best `.safetensors` + labels + metrics) are copied back into `/models`.
 - The opt-in uploader now feeds fresh samples straight into the Roboflow dataset so future training runs can consume manually curated examples without extra tooling.
 
 ## UX Flow (v0)
