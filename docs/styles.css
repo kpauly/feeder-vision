@@ -227,7 +227,7 @@ main {
     display: flex;
     flex-direction: column;
     gap: 0.9rem;
-    min-width: 520px;
+    flex: 0 0 520px;
     min-height: 360px;
     scroll-snap-align: start;
 }
