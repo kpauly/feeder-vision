@@ -9,9 +9,9 @@
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange.svg?logo=rust)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue)](https://polyformproject.org/licenses/noncommercial/1.0.0/)
 [![Platform](https://img.shields.io/badge/platform-Windows%2011-blue?logo=windows)](https://github.com/kpauly/feedie/releases)
-[![Platform](https://shields.io/badge/MacOS--9cf?logo=Apple&style=social)](https://github.com/kpauly/feedie/releases)
+[![Platform](https://shields.io/badge/macOS--9cf?logo=Apple&style=social)](https://github.com/kpauly/feedie/releases)
 
-Feedie is a native application available for Windows and MacOS that scans SD-card dump folders from your wildlife feeder camera, detects visitors with an EfficientViT model, and helps you export curated images and CSV reports. Everything runs fast on CPU only and locally — no cloud upload unless you explicitly opt in to sharing samples with Roboflow. The entire app is targeted to non-tech savvy users, and only available in Dutch for the moment. Additional languages (starting with English) are planned. The embedded model currently targets common garden species in Belgium and the Netherlands.
+Feedie is a native application available for Windows and macOS that scans SD-card dump folders from your wildlife feeder camera, detects visitors with an EfficientViT model, and helps you export curated images and CSV reports. Everything runs fast on CPU only and locally — no cloud upload unless you explicitly opt in to sharing samples with Roboflow. The entire app is targeted to non-tech savvy users, and only available in Dutch for the moment. Additional languages (starting with English) are planned. The embedded model currently targets common garden species in Belgium and the Netherlands.
 
 ---
 
@@ -68,9 +68,9 @@ Feedie was born out of a need for a simple, efficient, and user-friendly tool to
 
 ## Download & install
 
-1. Grab the latest `FeedieSetup-vX.Y.Z.exe` (for Windows) or `Feedie-mac-vX.Y.Z.zip` (for MacOS) from the [GitHub releases](https://github.com/kpauly/feedie/releases).
+1. Grab the latest `FeedieSetup-vX.Y.Z.exe` (for Windows) or `Feedie-mac-vX.Y.Z.zip` (for macOS) from the [GitHub releases](https://github.com/kpauly/feedie/releases).
 2. **Windows**: Run the installer. You may be warned a couple of times that you are about to install an app from an unknown publisher, but you can just accept. Feedie is installed to `C:\Program Files (x86)\Feedie`.
-**MacOS**: Open the downloaded zip file, drag `Feedie.app` into `/Applications` and run Feedie from there (right-click to accept the warning on first run).
+**macOS**: Open the downloaded zip file, drag `Feedie.app` into `/Applications` and run Feedie from there (right-click to accept the warning on first run).
 3. Launch Feedie from the Start menu. The bundled model is copied to `%AppData%\Feedie\models` on first run so you can work offline immediately.
 The Instellingen tab will show your currently installed app/model versions and automatically check for available updates.
 
