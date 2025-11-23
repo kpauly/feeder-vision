@@ -38,9 +38,9 @@
   - [x] Disable when nothing selected (Scenario 1)
   - [ ] (Follow-up) Export progress + warnings when labels are missing
 - [ ] **C7. Cached scan results**
-  - [ ] Persist per-folder scan results (path hash) under AppData, including manual edits
-  - [ ] Validate cache (file count/mtime/size); load cached rows when valid
-  - [ ] Keep Scan enabled to refresh and overwrite cache
+  - [x] Persist per-folder scan results (path hash) under AppData, including manual edits
+  - [x] Validate cache (file count/mtime/size); load cached rows when valid
+  - [x] Keep Scan enabled to refresh and overwrite cache
 
 ## GUI (egui)
 - [x] **G1. Shell**
