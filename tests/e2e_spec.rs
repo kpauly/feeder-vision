@@ -85,3 +85,14 @@ fn e2e_scenario_8_export_tab_batch_options() {
     // Then the app creates the requested subfolders, copies the matching images, and writes feeder_vision.csv with date,time,scientific name,lat,lng,path
     todo!("Implement Scenario 8 E2E");
 }
+
+#[test]
+#[ignore = "E2E not implemented; see specs/scenarios.md"]
+fn e2e_scenario_9_cached_scan_reopen_folder() {
+    // Scenario 9: Load cached scan for previously scanned folder
+    // Given the user selects a folder that was scanned before and the contents (count/mtime/size) still match
+    // When the folder is selected
+    // Then the Results and Export tabs become available immediately using the cached rows (including manual edits)
+    // And the Scan button remains enabled so the user can rescan and refresh the cache
+    todo!("Implement Scenario 9 E2E");
+}
