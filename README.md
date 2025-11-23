@@ -68,7 +68,10 @@ Feedie was born out of a need for a simple, efficient, and user-friendly tool to
 
 ## Download & install
 
-1. Grab the latest `FeedieSetup-vX.Y.Z.exe` (for Windows) or `Feedie-mac-vX.Y.Z.zip` (for macOS) from the [GitHub releases](https://github.com/kpauly/feedie/releases).
+1. Download for your platform:
+   - **Windows (Intel/AMD)**: [`FeedieSetup-1.2.0.exe`](https://github.com/kpauly/feedie/releases/download/v1.2.0/FeedieSetup-1.2.0.exe)
+   - **macOS Apple Silicon (M1/M2/M3)**: [`Feedie-mac-arm64-1.2.0.zip`](https://github.com/kpauly/feedie/releases/download/v1.2.0/Feedie-mac-arm64-1.2.0.zip)
+   - **macOS Intel**: [`Feedie-mac-intel-1.2.0.zip`](https://github.com/kpauly/feedie/releases/download/v1.2.0/Feedie-mac-intel-1.2.0.zip)
 2. **Windows**: Run the installer. You may be warned a couple of times that you are about to install an app from an unknown publisher, but you can just accept. Feedie is installed to `C:\Program Files (x86)\Feedie`.
 **macOS**: Open the downloaded zip file, drag `Feedie.app` into `/Applications` and run Feedie from there (right-click to accept the warning on first run).
 3. Launch Feedie from the Start menu. The bundled model is copied to `%AppData%\Feedie\models` on first run so you can work offline immediately.
