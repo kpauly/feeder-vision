@@ -21,6 +21,7 @@ Owners of feeder cameras dump thousands of photos onto their laptops after every
 - Roboflow feedback toggle: built-in API key, dataset field, background uploader for every manual relabel.
 - Context menu "New..." entry so users can add custom species labels on the fly; selections move to Present and are uploaded (when enabled).
 - Dutch GitHub Pages site with auto-updating download buttons for Windows and macOS.
+- Cached scan results: per-folder cache stored under AppData keyed by folder path hash; when a previously scanned folder is selected, Results/Export tabs become available immediately using the cached rows (including manual edits). Scan remains available to refresh/overwrite the cache. Cache is validated against file count/mtime/size and ignored if stale.
 
 ## Model training & dataset
 - Canonical dataset: `Voederhuiscamera.v2i.multiclass/{train,valid,test}` from Roboflow (512x512 JPGs + `_classes.csv`).

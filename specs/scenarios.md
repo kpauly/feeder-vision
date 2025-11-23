@@ -58,3 +58,9 @@ When the user clicks "Export", chooses a destination folder, and pastes the Goog
 Then the app creates subfolders per selected option (per species, "Uncertain", "Background")
 And copies the relevant images as `<label>_<originalfilename>.jpg` into each subfolder
 And writes `voederhuiscamera_yymmddhhmm.csv` in the export root with columns `date,time,scientific name,lat,lng,path` filled using the entered coordinates and the new file locations
+
+Scenario 9: Load cached scan for previously scanned folder
+Given the user selects a folder that was scanned before and the contents (count/mtime/size) still match
+When the folder is selected
+Then the Results and Export tabs become available immediately using the cached rows (including manual edits)
+And the Scan button remains enabled so the user can rescan and refresh the cache
