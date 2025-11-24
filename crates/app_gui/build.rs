@@ -1,6 +1,10 @@
 use std::env;
 
 fn main() {
+    // Rebuild when version or Roboflow key changes so baked-in envs stay in sync.
+    println!("cargo:rerun-if-env-changed=FEEDIE_VERSION");
+    println!("cargo:rerun-if-env-changed=FEEDIE_ROBOFLOW_API_KEY");
+
     let version =
         env::var("FEEDIE_VERSION").unwrap_or_else(|_| env::var("CARGO_PKG_VERSION").unwrap());
     println!("cargo:rustc-env=FEEDIE_VERSION={version}");

@@ -1,7 +1,7 @@
 //! Roboflow upload helper used when sharing manual corrections.
 
-use anyhow::{Context, anyhow};
-use reqwest::blocking::{Client, multipart};
+use anyhow::{anyhow, Context};
+use reqwest::blocking::{multipart, Client};
 use std::path::Path;
 use std::time::Duration;
 
@@ -43,9 +43,18 @@ pub fn upload_to_roboflow(
         .post(&upload_url)
         .multipart(form)
         .send()
-        .context("Roboflow-upload mislukt")?
-        .error_for_status()
-        .context("Roboflow-upload gaf een foutstatus")?;
+        .context("Roboflow-upload mislukt")?;
+    let status = response.status();
+    let response = if status.is_success() {
+        response
+    } else {
+        let body = response
+            .text()
+            .unwrap_or_else(|_| "<geen body>".to_string());
+        return Err(anyhow!(
+            "Roboflow-upload gaf een foutstatus: {status} - {body}"
+        ));
+    };
 
     let json: serde_json::Value = response
         .json()
@@ -71,14 +80,21 @@ pub fn upload_to_roboflow(
     );
     let annotation_text = format!("{label}\n");
 
-    client
+    let response = client
         .post(&annotate_url)
         .header("Content-Type", "text/plain")
         .body(annotation_text)
         .send()
-        .context("Roboflow-annotatie mislukt")?
-        .error_for_status()
-        .context("Roboflow-annotatie gaf een foutstatus")?;
+        .context("Roboflow-annotatie mislukt")?;
+    let status = response.status();
+    if !status.is_success() {
+        let body = response
+            .text()
+            .unwrap_or_else(|_| "<geen body>".to_string());
+        return Err(anyhow!(
+            "Roboflow-annotatie gaf een foutstatus: {status} - {body}"
+        ));
+    }
 
     Ok(())
 }
