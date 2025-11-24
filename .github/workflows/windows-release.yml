@@ -42,7 +42,6 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
           key: windows-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run CI checks
