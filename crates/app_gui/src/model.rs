@@ -5,7 +5,7 @@ use crate::util::canonical_label;
 use anyhow::{Context, anyhow};
 use directories_next::ProjectDirs;
 use feeder_core::{ClassifierConfig, Decision, ImageInfo};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -156,6 +156,20 @@ impl UiApp {
                 },
             });
         }
+        if options.iter().any(|option| option.display_en.is_none()) {
+            let fallback_path = bundled_models_dir().join(LABEL_FILE_NAME);
+            if fallback_path != path
+                && let Some(english_map) = load_english_labels_from(&fallback_path)
+            {
+                for option in &mut options {
+                    if option.display_en.is_none()
+                        && let Some(display_en) = english_map.get(&option.canonical)
+                    {
+                        option.display_en = Some(display_en.clone());
+                    }
+                }
+            }
+        }
         options
     }
 
@@ -194,6 +208,36 @@ impl UiApp {
 /// Resolves the path that contains the bundled models that ship with the app.
 fn bundled_models_dir() -> PathBuf {
     PathBuf::from("models")
+}
+
+fn load_english_labels_from(path: &Path) -> Option<HashMap<String, String>> {
+    let Ok(content) = fs::read_to_string(path) else {
+        return None;
+    };
+    let mut map = HashMap::new();
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .from_reader(content.as_bytes());
+    for record in reader.records().flatten() {
+        if record.len() < 3 {
+            continue;
+        }
+        let display = record.get(0).unwrap_or_default().trim();
+        if display.is_empty() {
+            continue;
+        }
+        let canonical = canonical_label(display);
+        if canonical.is_empty() {
+            continue;
+        }
+        let display_en = record.get(1).unwrap_or_default().trim();
+        if display_en.is_empty() {
+            continue;
+        }
+        map.entry(canonical)
+            .or_insert_with(|| display_en.to_string());
+    }
+    if map.is_empty() { None } else { Some(map) }
 }
 
 /// Recursively copies the bundled model files into the writable directory.
