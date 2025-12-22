@@ -3,6 +3,7 @@
 use crate::app::{
     LABEL_FILE_NAME, LabelOption, MODEL_FILE_NAME, SOMETHING_LABEL, UiApp, VERSION_FILE_NAME,
 };
+use crate::i18n::Language;
 use crate::util::canonical_label;
 use anyhow::{Context, anyhow};
 use directories_next::ProjectDirs;
@@ -94,62 +95,33 @@ impl UiApp {
             );
             return Vec::new();
         };
-        let mut seen = HashSet::new();
-        let mut options = Vec::new();
-        let mut reader = csv::ReaderBuilder::new()
-            .has_headers(false)
-            .from_reader(content.as_bytes());
-        for record in reader.records().flatten() {
-            let display = record.get(0).unwrap_or_default().trim();
-            if display.is_empty() {
-                continue;
-            }
-            let canonical = canonical_label(display);
-            if canonical.is_empty() || !seen.insert(canonical.clone()) {
-                continue;
-            }
-            let display_en = if record.len() >= 3 {
-                let raw = record.get(1).unwrap_or_default().trim();
-                if raw.is_empty() {
-                    None
-                } else {
-                    Some(raw.to_string())
-                }
-            } else {
-                None
-            };
-            let scientific_raw = if record.len() >= 3 {
-                record
-                    .iter()
-                    .skip(2)
-                    .collect::<Vec<_>>()
-                    .join(",")
-                    .trim()
-                    .to_string()
-            } else {
-                record.get(1).unwrap_or_default().trim().to_string()
-            };
-            options.push(LabelOption {
-                canonical,
-                display: display.to_string(),
-                display_en,
-                scientific: if scientific_raw.is_empty() {
-                    None
-                } else {
-                    Some(scientific_raw)
-                },
-            });
+        let mut options = parse_label_options(&content);
+        if options.is_empty() {
+            return options;
         }
-        if options.iter().any(|option| option.display_en.is_none()) {
+        let needs_fallback = options.iter().any(|option| {
+            TRANSLATED_LANGUAGES
+                .iter()
+                .any(|lang| !option.translations.contains_key(lang))
+        });
+        if needs_fallback {
             let fallback_path = bundled_models_dir().join(LABEL_FILE_NAME);
             if fallback_path != path
-                && let Some(english_map) = load_english_labels_from(&fallback_path)
+                && let Ok(fallback_content) = fs::read_to_string(&fallback_path)
             {
+                let fallback_options = parse_label_options(&fallback_content);
+                let fallback_map: HashMap<_, _> = fallback_options
+                    .into_iter()
+                    .map(|option| (option.canonical.clone(), option))
+                    .collect();
                 for option in &mut options {
-                    if option.display_en.is_none()
-                        && let Some(display_en) = english_map.get(&option.canonical)
-                    {
-                        option.display_en = Some(display_en.clone());
+                    if let Some(fallback) = fallback_map.get(&option.canonical) {
+                        for (language, value) in &fallback.translations {
+                            option
+                                .translations
+                                .entry(*language)
+                                .or_insert_with(|| value.clone());
+                        }
                     }
                 }
             }
@@ -194,34 +166,81 @@ fn bundled_models_dir() -> PathBuf {
     PathBuf::from("models")
 }
 
-fn load_english_labels_from(path: &Path) -> Option<HashMap<String, String>> {
-    let Ok(content) = fs::read_to_string(path) else {
-        return None;
-    };
-    let mut map = HashMap::new();
+const TRANSLATED_LANGUAGES: [Language; 5] = [
+    Language::English,
+    Language::French,
+    Language::German,
+    Language::Spanish,
+    Language::Swedish,
+];
+
+fn parse_label_options(content: &str) -> Vec<LabelOption> {
+    let mut seen = HashSet::new();
+    let mut options = Vec::new();
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(false)
         .from_reader(content.as_bytes());
     for record in reader.records().flatten() {
-        if record.len() < 3 {
-            continue;
-        }
         let display = record.get(0).unwrap_or_default().trim();
         if display.is_empty() {
             continue;
         }
         let canonical = canonical_label(display);
-        if canonical.is_empty() {
+        if canonical.is_empty() || !seen.insert(canonical.clone()) {
             continue;
         }
-        let display_en = record.get(1).unwrap_or_default().trim();
-        if display_en.is_empty() {
-            continue;
+
+        let mut translations = HashMap::new();
+        let mut scientific_raw = String::new();
+        if record.len() >= 7 {
+            insert_translation(&mut translations, Language::English, record.get(1));
+            insert_translation(&mut translations, Language::French, record.get(2));
+            insert_translation(&mut translations, Language::German, record.get(3));
+            insert_translation(&mut translations, Language::Spanish, record.get(4));
+            insert_translation(&mut translations, Language::Swedish, record.get(5));
+            scientific_raw = record
+                .iter()
+                .skip(6)
+                .collect::<Vec<_>>()
+                .join(",")
+                .trim()
+                .to_string();
+        } else if record.len() >= 3 {
+            insert_translation(&mut translations, Language::English, record.get(1));
+            scientific_raw = record
+                .iter()
+                .skip(2)
+                .collect::<Vec<_>>()
+                .join(",")
+                .trim()
+                .to_string();
+        } else if record.len() >= 2 {
+            scientific_raw = record.get(1).unwrap_or_default().trim().to_string();
         }
-        map.entry(canonical)
-            .or_insert_with(|| display_en.to_string());
+
+        options.push(LabelOption {
+            canonical,
+            display: display.to_string(),
+            translations,
+            scientific: if scientific_raw.is_empty() {
+                None
+            } else {
+                Some(scientific_raw)
+            },
+        });
     }
-    if map.is_empty() { None } else { Some(map) }
+    options
+}
+
+fn insert_translation(
+    translations: &mut HashMap<Language, String>,
+    language: Language,
+    raw: Option<&str>,
+) {
+    let value = raw.unwrap_or_default().trim();
+    if !value.is_empty() {
+        translations.insert(language, value.to_string());
+    }
 }
 
 /// Recursively copies the bundled model files into the writable directory.

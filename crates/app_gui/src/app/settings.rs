@@ -12,10 +12,18 @@ impl UiApp {
         ui.horizontal(|ui| {
             ui.label(self.t("settings-language"));
             let mut selected = self.language_preference;
-            let option_label = |lang: LanguagePreference| match lang {
-                LanguagePreference::System => "System (auto)",
-                LanguagePreference::Dutch => "Nederlands",
-                LanguagePreference::English => "English",
+            let system_language = crate::i18n::detect_system_language();
+            let system_label = crate::i18n::t_for(system_language, "language-option-system");
+            let option_label = |lang: LanguagePreference| -> String {
+                match lang {
+                    LanguagePreference::System => system_label.clone(),
+                    LanguagePreference::Dutch => "Nederlands".to_string(),
+                    LanguagePreference::English => "English".to_string(),
+                    LanguagePreference::French => "Français".to_string(),
+                    LanguagePreference::German => "Deutsch".to_string(),
+                    LanguagePreference::Spanish => "Español".to_string(),
+                    LanguagePreference::Swedish => "Svenska".to_string(),
+                }
             };
             egui::ComboBox::from_id_salt("language-select")
                 .selected_text(option_label(selected))
@@ -34,6 +42,26 @@ impl UiApp {
                         &mut selected,
                         LanguagePreference::English,
                         option_label(LanguagePreference::English),
+                    );
+                    ui.selectable_value(
+                        &mut selected,
+                        LanguagePreference::French,
+                        option_label(LanguagePreference::French),
+                    );
+                    ui.selectable_value(
+                        &mut selected,
+                        LanguagePreference::German,
+                        option_label(LanguagePreference::German),
+                    );
+                    ui.selectable_value(
+                        &mut selected,
+                        LanguagePreference::Spanish,
+                        option_label(LanguagePreference::Spanish),
+                    );
+                    ui.selectable_value(
+                        &mut selected,
+                        LanguagePreference::Swedish,
+                        option_label(LanguagePreference::Swedish),
                     );
                 });
             if selected != self.language_preference {

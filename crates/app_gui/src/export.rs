@@ -12,7 +12,7 @@ use chrono::{DateTime, Local};
 use eframe::egui;
 use feeder_core::{Classification, Decision, ImageInfo};
 use rfd::FileDialog;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -685,7 +685,7 @@ impl UiApp {
             self.label_options.push(LabelOption {
                 canonical: canonical.clone(),
                 display: new_label.clone(),
-                display_en: None,
+                translations: HashMap::new(),
                 scientific: None,
             });
         }
@@ -717,12 +717,7 @@ impl UiApp {
             .iter()
             .find(|option| option.canonical == canonical)
         {
-            if matches!(self.language, crate::i18n::Language::English)
-                && let Some(display_en) = &option.display_en
-            {
-                return display_en.clone();
-            }
-            return option.display.clone();
+            return option.display_for(self.language);
         }
         fallback_display_label(&canonical)
     }

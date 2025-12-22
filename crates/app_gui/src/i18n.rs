@@ -20,12 +20,20 @@ pub enum LanguagePreference {
     System,
     Dutch,
     English,
+    French,
+    German,
+    Spanish,
+    Swedish,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Language {
     Dutch,
     English,
+    French,
+    German,
+    Spanish,
+    Swedish,
 }
 
 impl LanguagePreference {
@@ -34,6 +42,10 @@ impl LanguagePreference {
             LanguagePreference::System => detect_system_language(),
             LanguagePreference::Dutch => Language::Dutch,
             LanguagePreference::English => Language::English,
+            LanguagePreference::French => Language::French,
+            LanguagePreference::German => Language::German,
+            LanguagePreference::Spanish => Language::Spanish,
+            LanguagePreference::Swedish => Language::Swedish,
         }
     }
 }
@@ -43,20 +55,35 @@ impl Language {
         match self {
             Language::Dutch => "nl-NL".parse().expect("valid langid"),
             Language::English => "en-US".parse().expect("valid langid"),
+            Language::French => "fr-FR".parse().expect("valid langid"),
+            Language::German => "de-DE".parse().expect("valid langid"),
+            Language::Spanish => "es-ES".parse().expect("valid langid"),
+            Language::Swedish => "sv-SE".parse().expect("valid langid"),
         }
     }
 }
 
 pub fn detect_system_language() -> Language {
     let requested = DesktopLanguageRequester::requested_languages();
-    if requested
-        .iter()
-        .any(|lang| lang.to_string().to_ascii_lowercase().starts_with("nl"))
-    {
-        Language::Dutch
-    } else {
-        Language::English
+    for lang in requested {
+        let lower = lang.to_string().to_ascii_lowercase();
+        if lower.starts_with("nl") {
+            return Language::Dutch;
+        }
+        if lower.starts_with("fr") {
+            return Language::French;
+        }
+        if lower.starts_with("de") {
+            return Language::German;
+        }
+        if lower.starts_with("es") {
+            return Language::Spanish;
+        }
+        if lower.starts_with("sv") {
+            return Language::Swedish;
+        }
     }
+    Language::English
 }
 
 pub fn t_for(language: Language, key: &str) -> String {
