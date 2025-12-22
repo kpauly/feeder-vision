@@ -142,6 +142,7 @@ We welcome contributions and feedback! Ideas (in no particular order):
 - macOS testing and PRs that fix issues on Mac
 - Add a "stats" tab to summarize/analyze scan results
 - Polish UI/UX and add translations
+- Help expand language support by contributing Fluent `i18n/*.ftl` translations and localized species labels.
 - Further optimizing CPU-based inference speed: enabling BLAS backend (mkl/accelerate), batch-level parallelism, batch size auto-tuning.
 
 Before submitting a PR:
