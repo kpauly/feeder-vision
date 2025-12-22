@@ -12,13 +12,10 @@ impl UiApp {
         ui.horizontal(|ui| {
             ui.label(self.t("settings-language"));
             let mut selected = self.language_preference;
-            let system_label = self.t("language-option-system");
-            let dutch_label = self.t("language-option-dutch");
-            let english_label = self.t("language-option-english");
             let option_label = |lang: LanguagePreference| match lang {
-                LanguagePreference::System => system_label.clone(),
-                LanguagePreference::Dutch => dutch_label.clone(),
-                LanguagePreference::English => english_label.clone(),
+                LanguagePreference::System => "System (auto)",
+                LanguagePreference::Dutch => "Nederlands",
+                LanguagePreference::English => "English",
             };
             egui::ComboBox::from_id_salt("language-select")
                 .selected_text(option_label(selected))
