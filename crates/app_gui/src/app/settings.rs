@@ -1,6 +1,6 @@
 //! Settings panel rendering for thresholds, uploads, and updates.
 
-use super::{Panel, UiApp};
+use super::{BACKGROUND_LABEL, Panel, SOMETHING_LABEL, UiApp};
 use crate::i18n::LanguagePreference;
 use eframe::egui;
 
@@ -87,9 +87,38 @@ impl UiApp {
         ui.add_space(12.0);
         ui.horizontal(|ui| {
             ui.label(self.tr("Achtergrondlabels", "Background labels"));
-            let response = ui.text_edit_singleline(&mut self.background_labels_input);
-            if response.changed() {
-                self.sync_background_labels();
+            let background_label = self.display_for(BACKGROUND_LABEL);
+            let something_label = self.display_for(SOMETHING_LABEL);
+            let mut include_something = self
+                .background_labels
+                .iter()
+                .any(|label| label == SOMETHING_LABEL);
+            let selected_text = if include_something {
+                format!("{background_label}, {something_label}")
+            } else {
+                background_label.clone()
+            };
+            let background_label_ui = background_label.clone();
+            let something_label_ui = something_label.clone();
+            egui::ComboBox::from_id_salt("background-labels")
+                .selected_text(selected_text)
+                .show_ui(ui, |ui| {
+                    let mut background_selected = self
+                        .background_labels
+                        .iter()
+                        .any(|label| label == BACKGROUND_LABEL);
+                    ui.add_enabled(
+                        false,
+                        egui::Checkbox::new(&mut background_selected, background_label_ui),
+                    );
+                    ui.checkbox(&mut include_something, something_label_ui);
+                });
+            let mut updated = vec![BACKGROUND_LABEL.to_string()];
+            if include_something {
+                updated.push(SOMETHING_LABEL.to_string());
+            }
+            if updated != self.background_labels {
+                self.update_background_labels(updated);
                 self.status = self
                     .tr(
                         "Achtergrondlabels bijgewerkt voor huidige resultaten",

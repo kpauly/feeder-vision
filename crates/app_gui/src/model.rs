@@ -1,6 +1,8 @@
 //! Model installation helpers and confidence heuristics.
 
-use crate::app::{LABEL_FILE_NAME, LabelOption, MODEL_FILE_NAME, UiApp, VERSION_FILE_NAME};
+use crate::app::{
+    LABEL_FILE_NAME, LabelOption, MODEL_FILE_NAME, SOMETHING_LABEL, UiApp, VERSION_FILE_NAME,
+};
 use crate::util::canonical_label;
 use anyhow::{Context, anyhow};
 use directories_next::ProjectDirs;
@@ -19,8 +21,8 @@ impl UiApp {
             if let Some(classification) = &info.classification {
                 match &classification.decision {
                     Decision::Label(name) => {
-                        let lower = name.to_ascii_lowercase();
-                        if !backgrounds.iter().any(|bg| bg == &lower) {
+                        let canonical = canonical_label(name);
+                        if !backgrounds.iter().any(|bg| bg == &canonical) {
                             present = classification.confidence >= threshold;
                         }
                     }
@@ -43,34 +45,16 @@ impl UiApp {
         };
         match &classification.decision {
             Decision::Label(name) => {
-                let lower = canonical_label(name);
-                if lower == "iets sp" {
-                    return true;
+                let canonical = canonical_label(name);
+                if canonical == SOMETHING_LABEL {
+                    return !self.is_background_label(&canonical);
                 }
-                if self.is_background_label(&lower) {
+                if self.is_background_label(&canonical) {
                     return false;
                 }
                 classification.confidence < self.presence_threshold
             }
             Decision::Unknown => false,
-        }
-    }
-
-    /// Updates the cached background labels from the comma separated text input.
-    pub(crate) fn sync_background_labels(&mut self) {
-        let parsed: Vec<String> = self
-            .background_labels_input
-            .split(',')
-            .map(|s| s.trim().to_ascii_lowercase())
-            .filter(|s| !s.is_empty())
-            .collect();
-        self.background_labels = if parsed.is_empty() {
-            vec!["achtergrond".to_string()]
-        } else {
-            parsed
-        };
-        if !self.rijen.is_empty() {
-            self.apply_presence_threshold();
         }
     }
 

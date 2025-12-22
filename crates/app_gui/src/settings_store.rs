@@ -7,14 +7,17 @@ use std::fs;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub(crate) struct AppSettings {
     pub(crate) language: LanguagePreference,
+    pub(crate) background_labels: Vec<String>,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
             language: LanguagePreference::System,
+            background_labels: vec!["achtergrond".to_string()],
         }
     }
 }
