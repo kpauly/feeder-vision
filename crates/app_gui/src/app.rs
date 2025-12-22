@@ -1,7 +1,9 @@
 //! Core application state for the Feedie GUI.
 
 use crate::export::{CoordinatePrompt, PendingExport};
+use crate::i18n::{Language, LanguagePreference};
 use crate::manifest::{ManifestStatus, ModelDownloadStatus};
+use crate::settings_store::{AppSettings, load_settings, save_settings};
 use eframe::{App, Frame, egui};
 use feeder_core::ImageInfo;
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
@@ -45,6 +47,7 @@ pub(crate) enum Panel {
 pub(crate) struct LabelOption {
     pub(crate) canonical: String,
     pub(crate) display: String,
+    pub(crate) display_en: Option<String>,
     pub(crate) scientific: Option<String>,
 }
 
@@ -126,6 +129,8 @@ pub struct UiApp {
     pub(crate) roboflow_dataset_input: String,
     pub(crate) upload_status_tx: Sender<String>,
     pub(crate) upload_status_rx: Receiver<String>,
+    pub(crate) language_preference: LanguagePreference,
+    pub(crate) language: Language,
 }
 
 impl UiApp {
@@ -142,6 +147,8 @@ impl UiApp {
         let label_options = Self::load_label_options_from(&model_root.join("feeder-labels.csv"));
         let (upload_status_tx, upload_status_rx) = std::sync::mpsc::channel();
         let (thumb_req_txs, thumb_res_rx) = thumbnails::spawn_thumbnail_worker();
+        let settings = load_settings();
+        let language = settings.language.resolve();
         Self {
             gekozen_map: None,
             rijen: Vec::new(),
@@ -192,6 +199,8 @@ impl UiApp {
             roboflow_dataset_input: "voederhuiscamera".to_string(),
             upload_status_tx,
             upload_status_rx,
+            language_preference: settings.language,
+            language,
         }
     }
 }
@@ -199,6 +208,26 @@ impl UiApp {
 impl Default for UiApp {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl UiApp {
+    pub(crate) fn update_language_preference(&mut self, preference: LanguagePreference) {
+        self.language_preference = preference;
+        self.language = preference.resolve();
+        let settings = AppSettings {
+            language: preference,
+        };
+        if let Err(err) = save_settings(&settings) {
+            tracing::warn!("Instellingen konden niet worden opgeslagen: {err}");
+        }
+    }
+
+    pub(crate) fn tr(&self, nl: &'static str, en: &'static str) -> &'static str {
+        match self.language {
+            Language::Dutch => nl,
+            Language::English => en,
+        }
     }
 }
 

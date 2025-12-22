@@ -112,15 +112,11 @@ impl UiApp {
         };
         let mut seen = HashSet::new();
         let mut options = Vec::new();
-        for line in content.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            let (display, scientific_raw) = match trimmed.split_once(',') {
-                Some((name, sci)) => (name.trim(), sci.trim()),
-                None => (trimmed, ""),
-            };
+        let mut reader = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(content.as_bytes());
+        for record in reader.records().flatten() {
+            let display = record.get(0).unwrap_or_default().trim();
             if display.is_empty() {
                 continue;
             }
@@ -128,13 +124,35 @@ impl UiApp {
             if canonical.is_empty() || !seen.insert(canonical.clone()) {
                 continue;
             }
+            let display_en = if record.len() >= 3 {
+                let raw = record.get(1).unwrap_or_default().trim();
+                if raw.is_empty() {
+                    None
+                } else {
+                    Some(raw.to_string())
+                }
+            } else {
+                None
+            };
+            let scientific_raw = if record.len() >= 3 {
+                record
+                    .iter()
+                    .skip(2)
+                    .collect::<Vec<_>>()
+                    .join(",")
+                    .trim()
+                    .to_string()
+            } else {
+                record.get(1).unwrap_or_default().trim().to_string()
+            };
             options.push(LabelOption {
                 canonical,
                 display: display.to_string(),
+                display_en,
                 scientific: if scientific_raw.is_empty() {
                     None
                 } else {
-                    Some(scientific_raw.to_string())
+                    Some(scientific_raw)
                 },
             });
         }
