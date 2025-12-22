@@ -48,8 +48,25 @@ pub(crate) enum Panel {
 pub(crate) struct LabelOption {
     pub(crate) canonical: String,
     pub(crate) display: String,
-    pub(crate) display_en: Option<String>,
+    pub(crate) translations: HashMap<Language, String>,
     pub(crate) scientific: Option<String>,
+}
+
+impl LabelOption {
+    pub(crate) fn display_for(&self, language: Language) -> String {
+        if matches!(language, Language::Dutch) {
+            return self.display.clone();
+        }
+        if let Some(label) = self.translations.get(&language) {
+            return label.clone();
+        }
+        if language != Language::English
+            && let Some(label) = self.translations.get(&Language::English)
+        {
+            return label.clone();
+        }
+        self.display.clone()
+    }
 }
 
 /// Background thumbnail decode request.
@@ -119,7 +136,8 @@ pub struct UiApp {
     pub(crate) pending_export: Option<PendingExport>,
     pub(crate) coordinate_prompt: Option<CoordinatePrompt>,
     pub(crate) manifest_status: ManifestStatus,
-    pub(crate) update_rx: Option<Receiver<Result<crate::manifest::RemoteManifest, String>>>,
+    pub(crate) update_rx:
+        Option<Receiver<Result<crate::manifest::RemoteManifest, crate::manifest::ManifestError>>>,
     pub(crate) model_download_status: ModelDownloadStatus,
     pub(crate) model_download_rx: Option<Receiver<Result<String, String>>>,
     pub(crate) app_version: String,

@@ -6,6 +6,7 @@ use i18n_embed::DesktopLanguageRequester;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use sys_locale::get_locale;
 use unic_langid::LanguageIdentifier;
 
 static_loader! {
@@ -20,12 +21,20 @@ pub enum LanguagePreference {
     System,
     Dutch,
     English,
+    French,
+    German,
+    Spanish,
+    Swedish,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Language {
     Dutch,
     English,
+    French,
+    German,
+    Spanish,
+    Swedish,
 }
 
 impl LanguagePreference {
@@ -34,6 +43,10 @@ impl LanguagePreference {
             LanguagePreference::System => detect_system_language(),
             LanguagePreference::Dutch => Language::Dutch,
             LanguagePreference::English => Language::English,
+            LanguagePreference::French => Language::French,
+            LanguagePreference::German => Language::German,
+            LanguagePreference::Spanish => Language::Spanish,
+            LanguagePreference::Swedish => Language::Swedish,
         }
     }
 }
@@ -43,20 +56,47 @@ impl Language {
         match self {
             Language::Dutch => "nl-NL".parse().expect("valid langid"),
             Language::English => "en-US".parse().expect("valid langid"),
+            Language::French => "fr-FR".parse().expect("valid langid"),
+            Language::German => "de-DE".parse().expect("valid langid"),
+            Language::Spanish => "es-ES".parse().expect("valid langid"),
+            Language::Swedish => "sv-SE".parse().expect("valid langid"),
         }
     }
 }
 
 pub fn detect_system_language() -> Language {
-    let requested = DesktopLanguageRequester::requested_languages();
-    if requested
-        .iter()
-        .any(|lang| lang.to_string().to_ascii_lowercase().starts_with("nl"))
+    if let Some(locale) = get_locale()
+        && let Some(language) = language_from_tag(&locale)
     {
-        Language::Dutch
-    } else {
-        Language::English
+        return language;
     }
+    let requested = DesktopLanguageRequester::requested_languages();
+    for lang in requested {
+        if let Some(language) = language_from_tag(&lang.to_string()) {
+            return language;
+        }
+    }
+    Language::English
+}
+
+fn language_from_tag(tag: &str) -> Option<Language> {
+    let lower = tag.to_ascii_lowercase();
+    if lower.starts_with("nl") {
+        return Some(Language::Dutch);
+    }
+    if lower.starts_with("fr") {
+        return Some(Language::French);
+    }
+    if lower.starts_with("de") {
+        return Some(Language::German);
+    }
+    if lower.starts_with("es") {
+        return Some(Language::Spanish);
+    }
+    if lower.starts_with("sv") {
+        return Some(Language::Swedish);
+    }
+    None
 }
 
 pub fn t_for(language: Language, key: &str) -> String {

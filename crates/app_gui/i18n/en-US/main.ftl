@@ -63,6 +63,7 @@ preview-image-load-failed = Image could not be loaded.
 
 settings-title = Settings
 settings-language = Language
+language-option-system = System (auto)
 settings-language-updated = Language updated.
 settings-uncertainty-threshold = Uncertainty threshold
 settings-threshold-applied = Uncertainty threshold applied

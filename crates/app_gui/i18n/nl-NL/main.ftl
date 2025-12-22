@@ -63,6 +63,7 @@ preview-image-load-failed = Afbeelding kon niet geladen worden.
 
 settings-title = Instellingen
 settings-language = Taal
+language-option-system = Systeem (automatisch)
 settings-language-updated = Taal gewijzigd.
 settings-uncertainty-threshold = Onzekerheidsdrempel
 settings-threshold-applied = Onzekerheidsdrempel toegepast
