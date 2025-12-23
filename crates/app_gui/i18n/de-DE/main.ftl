@@ -68,6 +68,7 @@ settings-language-updated = Sprache aktualisiert.
 settings-uncertainty-threshold = Unsicherheitsgrenze
 settings-threshold-applied = Unsicherheitsgrenze angewendet
 settings-batch-size = Batchgröße
+settings-batch-size-auto = Auto
 settings-batch-size-status = Neue Batchgröße wird beim nächsten Scan angewendet
 settings-background-labels = Hintergrundlabels
 settings-background-updated = Hintergrundlabels für aktuelle Ergebnisse aktualisiert

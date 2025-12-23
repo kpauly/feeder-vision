@@ -125,6 +125,7 @@ pub struct UiApp {
     pub(crate) presence_threshold: f32,
     pub(crate) pending_presence_threshold: f32,
     pub(crate) batch_size: usize,
+    pub(crate) auto_batch_size: bool,
     pub(crate) background_labels: Vec<String>,
     pub(crate) preview: Option<PreviewState>,
     pub(crate) label_options: Vec<LabelOption>,
@@ -195,7 +196,8 @@ impl UiApp {
             current_page: 0,
             presence_threshold: 0.5,
             pending_presence_threshold: 0.5,
-            batch_size: 8,
+            batch_size: settings.batch_size.max(1),
+            auto_batch_size: settings.auto_batch_size,
             background_labels,
             preview: None,
             label_options,
@@ -251,6 +253,8 @@ impl UiApp {
         let settings = AppSettings {
             language: self.language_preference,
             background_labels: self.background_labels.clone(),
+            batch_size: self.batch_size,
+            auto_batch_size: self.auto_batch_size,
         };
         if let Err(err) = save_settings(&settings) {
             tracing::warn!("Instellingen konden niet worden opgeslagen: {err}");

@@ -2,7 +2,7 @@
 
 use super::{Panel, ScanMsg, UiApp, ViewMode};
 use eframe::egui;
-use feeder_core::{EfficientVitClassifier, ScanOptions, scan_folder_with};
+use feeder_core::{EfficientVitClassifier, ImageInfo, ScanOptions, scan_folder_with};
 use rfd::FileDialog;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -108,6 +108,8 @@ impl UiApp {
         let (tx, rx): (Sender<ScanMsg>, Receiver<ScanMsg>) = mpsc::channel();
         self.rx = Some(rx);
         let cfg = self.classifier_config();
+        let auto_batch_size = self.auto_batch_size;
+        let batch_size = self.batch_size;
         let language = self.language;
         thread::spawn(move || {
             let t0 = Instant::now();
@@ -135,9 +137,18 @@ impl UiApp {
                 }
             };
             let tx_progress = tx.clone();
-            if let Err(e) = classifier.classify_with_progress(&mut rows, |done, total| {
-                let _ = tx_progress.send(ScanMsg::Progress(done.min(total), total));
-            }) {
+            let batch_size = if auto_batch_size {
+                auto_tune_batch_size(&classifier, &rows)
+            } else {
+                batch_size.max(1)
+            };
+            if let Err(e) = classifier.classify_with_progress_and_batch_size(
+                &mut rows,
+                batch_size,
+                |done, total| {
+                    let _ = tx_progress.send(ScanMsg::Progress(done.min(total), total));
+                },
+            ) {
                 let _ = tx.send(ScanMsg::Error(format!(
                     "{}: {e}",
                     crate::i18n::t_for(language, "classification-failed")
@@ -150,4 +161,40 @@ impl UiApp {
             let _ = tx.send(ScanMsg::Done(rows, elapsed_ms));
         });
     }
+}
+
+const AUTO_BATCH_CANDIDATES: [usize; 4] = [4, 8, 12, 16];
+const AUTO_BATCH_SAMPLE: usize = 32;
+
+fn auto_tune_batch_size(classifier: &EfficientVitClassifier, rows: &[ImageInfo]) -> usize {
+    let total = rows.len();
+    if total == 0 {
+        return 1;
+    }
+    let mut candidates: Vec<usize> = AUTO_BATCH_CANDIDATES
+        .into_iter()
+        .filter(|&size| size <= total)
+        .collect();
+    if candidates.is_empty() {
+        return total.max(1);
+    }
+    let sample_len = total.min(AUTO_BATCH_SAMPLE);
+    let sample: Vec<ImageInfo> = rows.iter().take(sample_len).cloned().collect();
+    let mut best = (f64::INFINITY, candidates[0]);
+    for candidate in candidates.drain(..) {
+        let mut sample_rows = sample.clone();
+        let start = Instant::now();
+        if classifier
+            .classify_with_progress_and_batch_size(&mut sample_rows, candidate, |_, _| {})
+            .is_err()
+        {
+            continue;
+        }
+        let elapsed = start.elapsed().as_secs_f64();
+        let per_image = elapsed / sample_len as f64;
+        if per_image < best.0 {
+            best = (per_image, candidate);
+        }
+    }
+    best.1
 }

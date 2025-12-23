@@ -68,6 +68,7 @@ settings-language-updated = Språk uppdaterat.
 settings-uncertainty-threshold = Osäkerhetströskel
 settings-threshold-applied = Osäkerhetströskel tillämpad
 settings-batch-size = Batchstorlek
+settings-batch-size-auto = Auto
 settings-batch-size-status = Ny batchstorlek används vid nästa skanning
 settings-background-labels = Bakgrundsetiketter
 settings-background-updated = Bakgrundsetiketter uppdaterade för aktuella resultat
