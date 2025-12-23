@@ -68,6 +68,7 @@ settings-language-updated = Taal gewijzigd.
 settings-uncertainty-threshold = Onzekerheidsdrempel
 settings-threshold-applied = Onzekerheidsdrempel toegepast
 settings-batch-size = Batchgrootte
+settings-batch-size-auto = Auto
 settings-batch-size-status = Nieuwe batchgrootte wordt toegepast bij volgende scan
 settings-background-labels = Achtergrondlabels
 settings-background-updated = Achtergrondlabels bijgewerkt voor huidige resultaten

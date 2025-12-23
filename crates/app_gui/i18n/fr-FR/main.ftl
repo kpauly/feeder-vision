@@ -68,6 +68,7 @@ settings-language-updated = Langue mise à jour.
 settings-uncertainty-threshold = Seuil d'incertitude
 settings-threshold-applied = Seuil d'incertitude appliqué
 settings-batch-size = Taille du lot
+settings-batch-size-auto = Auto
 settings-batch-size-status = La nouvelle taille de lot sera appliquée lors du prochain scan
 settings-background-labels = Labels d'arrière-plan
 settings-background-updated = Labels d'arrière-plan mis à jour pour les résultats actuels

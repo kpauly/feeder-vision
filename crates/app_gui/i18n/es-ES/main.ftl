@@ -68,6 +68,7 @@ settings-language-updated = Idioma actualizado.
 settings-uncertainty-threshold = Umbral de incertidumbre
 settings-threshold-applied = Umbral de incertidumbre aplicado
 settings-batch-size = Tamaño del lote
+settings-batch-size-auto = Auto
 settings-batch-size-status = El nuevo tamaño del lote se aplicará en el próximo escaneo
 settings-background-labels = Etiquetas de fondo
 settings-background-updated = Etiquetas de fondo actualizadas para los resultados actuales

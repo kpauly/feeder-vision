@@ -493,9 +493,18 @@ mod classifier {
         /// # Errors
         ///
         /// Returns an error if tensor creation or model evaluation fails.
-        pub fn classify_with_progress<F>(
+        pub fn classify_with_progress<F>(&self, rows: &mut [ImageInfo], progress: F) -> Result<()>
+        where
+            F: FnMut(usize, usize),
+        {
+            self.classify_with_progress_and_batch_size(rows, self.batch_size, progress)
+        }
+
+        /// Classifies the provided rows using the supplied batch size.
+        pub fn classify_with_progress_and_batch_size<F>(
             &self,
             rows: &mut [ImageInfo],
+            batch_size: usize,
             mut progress: F,
         ) -> Result<()>
         where
@@ -507,7 +516,8 @@ mod classifier {
             }
 
             let mut processed = 0usize;
-            for chunk in rows.chunks_mut(self.batch_size) {
+            let batch_size = batch_size.max(1);
+            for chunk in rows.chunks_mut(batch_size) {
                 self.classify_chunk(chunk)?;
                 processed += chunk.len();
                 progress(processed.min(total), total);

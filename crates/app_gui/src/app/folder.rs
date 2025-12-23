@@ -2,7 +2,7 @@
 
 use super::{Panel, ScanMsg, UiApp, ViewMode};
 use eframe::egui;
-use feeder_core::{EfficientVitClassifier, ScanOptions, scan_folder_with};
+use feeder_core::{EfficientVitClassifier, ImageInfo, ScanOptions, scan_folder_with};
 use rfd::FileDialog;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -135,7 +135,7 @@ impl UiApp {
                 }
             };
             let tx_progress = tx.clone();
-            if let Err(e) = classifier.classify_with_progress(&mut rows, |done, total| {
+            if let Err(e) = classify_with_auto_batch(&classifier, &mut rows, |done, total| {
                 let _ = tx_progress.send(ScanMsg::Progress(done.min(total), total));
             }) {
                 let _ = tx.send(ScanMsg::Error(format!(
@@ -150,4 +150,92 @@ impl UiApp {
             let _ = tx.send(ScanMsg::Done(rows, elapsed_ms));
         });
     }
+}
+
+const AUTO_BATCH_MIN_TOTAL: usize = 1000;
+const AUTO_BATCH_BASELINE: usize = 8;
+const AUTO_BATCH_CANDIDATES: [usize; 2] = [AUTO_BATCH_BASELINE, 12];
+const AUTO_BATCH_TUNE_BATCHES: usize = 4;
+const AUTO_BATCH_MIN_IMPROVEMENT: f64 = 0.15;
+
+fn classify_with_auto_batch<F>(
+    classifier: &EfficientVitClassifier,
+    rows: &mut [ImageInfo],
+    mut progress: F,
+) -> anyhow::Result<()>
+where
+    F: FnMut(usize, usize),
+{
+    let total = rows.len();
+    if total == 0 {
+        return Ok(());
+    }
+    if total < AUTO_BATCH_MIN_TOTAL {
+        return classifier.classify_with_progress_and_batch_size(
+            rows,
+            AUTO_BATCH_BASELINE,
+            progress,
+        );
+    }
+
+    let mut offset = 0usize;
+    let mut timings: Vec<(usize, f64)> = Vec::new();
+    for &candidate in AUTO_BATCH_CANDIDATES.iter() {
+        let tune_len = candidate * AUTO_BATCH_TUNE_BATCHES;
+        if offset + tune_len > total {
+            break;
+        }
+        let start = Instant::now();
+        let mut local_done = 0usize;
+        classifier.classify_with_progress_and_batch_size(
+            &mut rows[offset..offset + tune_len],
+            candidate,
+            |done, _| {
+                if done == local_done {
+                    return;
+                }
+                local_done = done;
+                progress(offset + local_done, total);
+            },
+        )?;
+        let elapsed = start.elapsed().as_secs_f64();
+        if local_done > 0 {
+            timings.push((candidate, elapsed / local_done as f64));
+        }
+        offset += local_done;
+    }
+
+    let mut chosen = AUTO_BATCH_BASELINE;
+    if let Some(base_time) = timings
+        .iter()
+        .find(|(size, _)| *size == AUTO_BATCH_BASELINE)
+        .map(|(_, per_image)| *per_image)
+    {
+        let mut best_time = base_time;
+        for (size, per_image) in &timings {
+            if *size == AUTO_BATCH_BASELINE {
+                continue;
+            }
+            if *per_image < base_time * (1.0 - AUTO_BATCH_MIN_IMPROVEMENT) && *per_image < best_time
+            {
+                best_time = *per_image;
+                chosen = *size;
+            }
+        }
+    } else if let Some((size, _)) = timings.first() {
+        chosen = *size;
+    } else {
+        chosen = AUTO_BATCH_BASELINE;
+    }
+
+    if offset < total {
+        classifier.classify_with_progress_and_batch_size(
+            &mut rows[offset..],
+            chosen,
+            |done, _| {
+                progress(offset + done, total);
+            },
+        )?;
+    }
+    Ok(())
 }
