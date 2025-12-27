@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::mpsc::{self, TryRecvError};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tempfile::tempdir;
 use zip::ZipArchive;
 
@@ -372,20 +372,41 @@ impl UiApp {
                 tracing::warn!("Kon app-pad niet bepalen: {err}");
                 AppDownloadError::InstallFailed
             })?;
-            let updater_path = app_exe
+            let updater_source = app_exe
                 .parent()
                 .ok_or(AppDownloadError::InstallFailed)?
                 .join("FeedieUpdater.exe");
-            if !updater_path.exists() {
+            if !updater_source.exists() {
                 tracing::warn!("FeedieUpdater.exe ontbreekt naast {}", app_exe.display());
                 return Err(AppDownloadError::UpdaterMissing);
             }
 
+            let updater_dir = installer_path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(env::temp_dir);
+            let stamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis();
+            let updater_path = updater_dir.join(format!("FeedieUpdater-{stamp}.exe"));
+            fs::copy(&updater_source, &updater_path).map_err(|err| {
+                tracing::warn!(
+                    "Kon updater niet kopieren van {} naar {}: {err}",
+                    updater_source.display(),
+                    updater_path.display()
+                );
+                AppDownloadError::InstallFailed
+            })?;
+
+            let log_path = installer_path.with_extension("log");
             let mut cmd = Command::new(&updater_path);
             cmd.arg("--installer")
                 .arg(installer_path)
                 .arg("--app")
                 .arg(app_exe)
+                .arg("--log")
+                .arg(log_path)
                 .arg("--cleanup")
                 .creation_flags(CREATE_NO_WINDOW);
             cmd.spawn().map_err(|err| {

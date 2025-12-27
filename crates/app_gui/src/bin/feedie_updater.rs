@@ -17,15 +17,19 @@ fn main() -> Result<()> {
         .map(PathBuf::from)
         .context("Missing --app argument")?;
     let cleanup = args.iter().any(|arg| arg == "--cleanup");
+    let log_path = value_for(&args, "--log").map(PathBuf::from);
 
     thread::sleep(Duration::from_millis(1500));
 
+    let log_path = log_path.unwrap_or_else(|| installer.with_extension("log"));
+    let log_arg = format!("/LOG={}", log_path.display());
     let status = Command::new(&installer)
         .args([
             "/VERYSILENT",
             "/SUPPRESSMSGBOXES",
             "/NORESTART",
             "/CLOSEAPPLICATIONS",
+            &log_arg,
         ])
         .status()
         .with_context(|| format!("Failed to start installer {}", installer.display()))?;
