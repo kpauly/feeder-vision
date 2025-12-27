@@ -36,6 +36,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "..\target\release\Feedie.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\target\release\FeedieUpdater.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\models\*"; DestDir: "{app}\models"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\manifest.json"; DestDir: "{app}"; Flags: ignoreversion
 

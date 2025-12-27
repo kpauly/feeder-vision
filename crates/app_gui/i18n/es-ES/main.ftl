@@ -1,4 +1,4 @@
-# Traducciones en español
+﻿# Traducciones en español
 
 nav-photo-folder = Carpeta de fotos
 nav-results = Resultados
@@ -121,6 +121,10 @@ updates-check = Buscar actualizaciones
 updates-checking = Buscando actualizaciones...
 updates-check-failed = Error al buscar actualizaciones
 updates-app-available = Nueva versión de la aplicación disponible
+updates-app-size = Tamaño de descarga estimado
+updates-app-download-install = Descargar e instalar actualización
+updates-app-downloading = Descargando actualización de la app...
+updates-app-installing = Instalando actualización...
 updates-open-download = Abrir página de descarga
 updates-app-latest = Estás usando la última versión de la aplicación.
 updates-model-available = Nuevo modelo disponible

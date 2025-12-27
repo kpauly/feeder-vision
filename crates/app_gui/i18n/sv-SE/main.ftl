@@ -1,4 +1,4 @@
-# Svenska översättningar
+﻿# Svenska översättningar
 
 nav-photo-folder = Fotomapp
 nav-results = Resultat
@@ -121,6 +121,10 @@ updates-check = Sök efter uppdateringar
 updates-checking = Söker efter uppdateringar...
 updates-check-failed = Uppdateringskontroll misslyckades
 updates-app-available = Ny appversion tillgänglig
+updates-app-size = Uppskattad nedladdningsstorlek
+updates-app-download-install = Hämta och installera uppdatering
+updates-app-downloading = Hämtar appuppdatering...
+updates-app-installing = Installerar uppdatering...
 updates-open-download = Öppna nedladdningssidan
 updates-app-latest = Du använder den senaste appversionen.
 updates-model-available = Ny modell tillgänglig

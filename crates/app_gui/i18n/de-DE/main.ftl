@@ -1,4 +1,4 @@
-# Deutsche ?bersetzungen
+﻿# Deutsche ?bersetzungen
 
 nav-photo-folder = Fotoordner
 nav-results = Ergebnisse
@@ -121,6 +121,10 @@ updates-check = Auf Updates prüfen
 updates-checking = Suche nach Updates...
 updates-check-failed = Update-Prüfung fehlgeschlagen
 updates-app-available = Neue App-Version verfügbar
+updates-app-size = Geschätzte Downloadgröße
+updates-app-download-install = Update herunterladen und installieren
+updates-app-downloading = App-Update wird heruntergeladen...
+updates-app-installing = App-Update wird installiert...
 updates-open-download = Downloadseite öffnen
 updates-app-latest = Sie verwenden die neueste App-Version.
 updates-model-available = Neues Modell verfügbar

@@ -1,4 +1,4 @@
-# Traductions françaises
+﻿# Traductions françaises
 
 nav-photo-folder = Dossier photo
 nav-results = Résultats
@@ -121,6 +121,10 @@ updates-check = Vérifier les mises à jour
 updates-checking = Vérification des mises à jour...
 updates-check-failed = Échec de la vérification des mises à jour
 updates-app-available = Nouvelle version de l'application disponible
+updates-app-size = Taille de téléchargement estimée
+updates-app-download-install = Télécharger et installer la mise à jour
+updates-app-downloading = Téléchargement de la mise à jour de l'application...
+updates-app-installing = Installation de la mise à jour de l'application...
 updates-open-download = Ouvrir la page de téléchargement
 updates-app-latest = Vous utilisez la dernière version de l'application.
 updates-model-available = Nouveau modèle disponible
