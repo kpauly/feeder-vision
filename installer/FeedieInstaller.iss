@@ -44,3 +44,6 @@ Source: "..\manifest.json"; DestDir: "{app}"; Flags: ignoreversion
 [Icons]
 Name: "{autoprograms}\Feedie"; Filename: "{app}\Feedie.exe"
 Name: "{autodesktop}\Feedie"; Filename: "{app}\Feedie.exe"; Tasks: desktopicon
+
+[Run]
+Filename: "{app}\Feedie.exe"; Description: "{cm:LaunchProgram,Feedie}"; Flags: nowait postinstall skipifsilent
