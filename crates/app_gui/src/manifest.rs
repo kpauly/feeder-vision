@@ -86,7 +86,26 @@ pub(crate) enum AppDownloadStatus {
     Idle,
     Downloading,
     Installing,
-    Error(String),
+    Error(AppDownloadError),
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum AppDownloadError {
+    DownloadFailed,
+    HashMismatch,
+    UpdaterMissing,
+    InstallFailed,
+}
+
+impl AppDownloadError {
+    fn message_key(self) -> &'static str {
+        match self {
+            AppDownloadError::DownloadFailed => "updates-app-download-failed",
+            AppDownloadError::HashMismatch => "updates-app-hash-mismatch",
+            AppDownloadError::UpdaterMissing => "updates-app-updater-missing",
+            AppDownloadError::InstallFailed => "updates-app-install-failed",
+        }
+    }
 }
 
 impl UiApp {
@@ -188,7 +207,7 @@ impl UiApp {
                         self.t("updates-app-available"),
                         summary.latest_app
                     ));
-                    if let Some(size) = summary.app_windows_size_mb {
+                    if let Some(size) = summary.app_windows_size_mb.filter(|size| *size > 0.0) {
                         ui.label(format!("{}: {:.1} MB", self.t("updates-app-size"), size));
                     }
                     if cfg!(target_os = "windows") && summary.app_windows_url.is_some() {
@@ -244,7 +263,7 @@ impl UiApp {
                 ui.label(self.t("updates-app-installing"));
             }
             AppDownloadStatus::Error(err) => {
-                ui.colored_label(egui::Color32::RED, err);
+                ui.colored_label(egui::Color32::RED, self.t(err.message_key()));
                 if ui.button(self.t("updates-download-again")).clicked() {
                     self.start_app_download(summary);
                 }
@@ -317,8 +336,7 @@ impl UiApp {
         self.app_download_rx = Some(rx);
         self.app_download_status = AppDownloadStatus::Downloading;
         thread::spawn(move || {
-            let result = download_app_installer(&url, expected_hash.as_deref(), &version)
-                .map_err(|e| e.to_string());
+            let result = download_app_installer(&url, expected_hash.as_deref(), &version);
             let _ = tx.send(result);
         });
     }
@@ -330,7 +348,7 @@ impl UiApp {
                 Ok(Ok(installer_path)) => {
                     self.app_download_status = AppDownloadStatus::Installing;
                     if let Err(err) = self.launch_app_update(&installer_path) {
-                        self.app_download_status = AppDownloadStatus::Error(err.to_string());
+                        self.app_download_status = AppDownloadStatus::Error(err);
                     }
                 }
                 Ok(Err(err)) => {
@@ -341,22 +359,26 @@ impl UiApp {
                 }
                 Err(TryRecvError::Disconnected) => {
                     self.app_download_status =
-                        AppDownloadStatus::Error(self.t("updates-download-channel-closed"));
+                        AppDownloadStatus::Error(AppDownloadError::DownloadFailed);
                 }
             }
         }
     }
 
-    fn launch_app_update(&self, installer_path: &Path) -> anyhow::Result<()> {
+    fn launch_app_update(&self, installer_path: &Path) -> Result<(), AppDownloadError> {
         #[cfg(target_os = "windows")]
         {
-            let app_exe = env::current_exe().context("Huidige app-pad niet gevonden")?;
+            let app_exe = env::current_exe().map_err(|err| {
+                tracing::warn!("Kon app-pad niet bepalen: {err}");
+                AppDownloadError::InstallFailed
+            })?;
             let updater_path = app_exe
                 .parent()
-                .context("Kon app-map niet bepalen")?
+                .ok_or(AppDownloadError::InstallFailed)?
                 .join("FeedieUpdater.exe");
             if !updater_path.exists() {
-                anyhow::bail!("FeedieUpdater.exe ontbreekt naast {}", app_exe.display());
+                tracing::warn!("FeedieUpdater.exe ontbreekt naast {}", app_exe.display());
+                return Err(AppDownloadError::UpdaterMissing);
             }
 
             let mut cmd = Command::new(&updater_path);
@@ -366,15 +388,17 @@ impl UiApp {
                 .arg(app_exe)
                 .arg("--cleanup")
                 .creation_flags(CREATE_NO_WINDOW);
-            cmd.spawn()
-                .with_context(|| format!("Kon updater {} niet starten", updater_path.display()))?;
+            cmd.spawn().map_err(|err| {
+                tracing::warn!("Kon updater {} niet starten: {err}", updater_path.display());
+                AppDownloadError::InstallFailed
+            })?;
             std::process::exit(0);
         }
 
         #[cfg(not(target_os = "windows"))]
         {
             let _ = installer_path;
-            anyhow::bail!("Automatische updates zijn alleen beschikbaar op Windows.");
+            Err(AppDownloadError::InstallFailed)
         }
     }
 
@@ -483,7 +507,10 @@ fn fetch_remote_manifest() -> anyhow::Result<RemoteManifest> {
 }
 
 fn manifest_url() -> String {
-    env::var("FEEDIE_MANIFEST_URL").unwrap_or_else(|_| MANIFEST_URL.to_string())
+    match env::var("FEEDIE_MANIFEST_URL") {
+        Ok(value) if !value.trim().is_empty() => value,
+        _ => MANIFEST_URL.to_string(),
+    }
 }
 
 /// Returns true if `latest` represents a version newer than `current`.
@@ -499,32 +526,62 @@ fn download_app_installer(
     url: &str,
     expected_sha256: Option<&str>,
     version: &str,
-) -> anyhow::Result<PathBuf> {
+) -> Result<PathBuf, AppDownloadError> {
     let client = Client::builder()
         .timeout(Duration::from_secs(120))
         .build()
-        .context("HTTP-client kon niet worden opgebouwd")?;
+        .map_err(|err| {
+            tracing::warn!("HTTP-client kon niet worden opgebouwd: {err}");
+            AppDownloadError::DownloadFailed
+        })?;
     let mut response = client
         .get(url)
         .send()
-        .context("App-update kon niet worden opgehaald")?
+        .map_err(|err| {
+            tracing::warn!("App-update kon niet worden opgehaald: {err}");
+            AppDownloadError::DownloadFailed
+        })?
         .error_for_status()
-        .context("Server gaf een foutstatus terug")?;
+        .map_err(|err| {
+            tracing::warn!("Server gaf een foutstatus terug: {err}");
+            AppDownloadError::DownloadFailed
+        })?;
 
     let file_name = file_name_from_url(url).unwrap_or_else(|| format!("FeedieSetup-{version}.exe"));
     let target_dir = env::temp_dir().join("FeedieUpdate").join(version);
-    fs::create_dir_all(&target_dir).context("Kon tijdelijke update-map niet maken")?;
+    fs::create_dir_all(&target_dir).map_err(|err| {
+        tracing::warn!("Kon tijdelijke update-map niet maken: {err}");
+        AppDownloadError::DownloadFailed
+    })?;
     let installer_path = target_dir.join(file_name);
     {
-        let mut file = fs::File::create(&installer_path)
-            .context("Kon tijdelijk downloadbestand niet openen")?;
-        io::copy(&mut response, &mut file).context("Download kon niet worden opgeslagen")?;
+        let mut file = fs::File::create(&installer_path).map_err(|err| {
+            tracing::warn!("Kon tijdelijk downloadbestand niet openen: {err}");
+            AppDownloadError::DownloadFailed
+        })?;
+        io::copy(&mut response, &mut file).map_err(|err| {
+            tracing::warn!("Download kon niet worden opgeslagen: {err}");
+            AppDownloadError::DownloadFailed
+        })?;
     }
 
+    let expected_sha256 = expected_sha256.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    });
+
     if let Some(expected) = expected_sha256 {
-        let actual = sha256_file(&installer_path)?;
+        let actual = sha256_file(&installer_path).map_err(|err| {
+            tracing::warn!("Kon SHA256 niet berekenen: {err}");
+            AppDownloadError::DownloadFailed
+        })?;
         if !actual.eq_ignore_ascii_case(expected) {
-            anyhow::bail!("SHA256 mismatch: verwacht {expected}, kreeg {actual}");
+            tracing::warn!("SHA256 mismatch: expected {expected}, actual {actual}");
+            return Err(AppDownloadError::HashMismatch);
         }
     }
 

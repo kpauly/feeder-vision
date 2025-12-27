@@ -140,7 +140,8 @@ pub struct UiApp {
     pub(crate) model_download_status: ModelDownloadStatus,
     pub(crate) model_download_rx: Option<Receiver<Result<String, String>>>,
     pub(crate) app_download_status: AppDownloadStatus,
-    pub(crate) app_download_rx: Option<Receiver<Result<PathBuf, String>>>,
+    pub(crate) app_download_rx:
+        Option<Receiver<Result<PathBuf, crate::manifest::AppDownloadError>>>,
     pub(crate) app_version: String,
     pub(crate) model_version: String,
     pub(crate) model_root: PathBuf,
