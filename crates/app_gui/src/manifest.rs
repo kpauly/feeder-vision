@@ -528,7 +528,7 @@ fn download_app_installer(
     version: &str,
 ) -> Result<PathBuf, AppDownloadError> {
     let client = Client::builder()
-        .timeout(Duration::from_secs(120))
+        .timeout(Duration::from_secs(300))
         .build()
         .map_err(|err| {
             tracing::warn!("HTTP-client kon niet worden opgebouwd: {err}");
