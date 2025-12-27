@@ -26,6 +26,7 @@ DisableProgramGroupPage=yes
 SetupLogging=yes
 LicenseFile=..\LICENSE
 UninstallDisplayIcon={app}\Feedie.exe
+SetupIconFile=..\assets\Feedie.ico
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

@@ -36,6 +36,9 @@ sys-locale = "0.3"
 name = "FeedieUpdater"
 path = "src/bin/feedie_updater.rs"
 
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
+
 [dev-dependencies]
 rstest = "0.26.1"
 
