@@ -3,6 +3,7 @@ name = "app_gui"
 version = "1.2.0"
 edition = "2024"
 build = "build.rs"
+default-run = "app_gui"
 
 [dependencies]
 anyhow = "1.0.100"
