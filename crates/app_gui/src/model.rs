@@ -150,7 +150,10 @@ impl UiApp {
 
     /// Copies the bundled models into the writable directory when missing.
     pub(crate) fn ensure_models_present(target: &Path) -> anyhow::Result<()> {
-        if target.exists() {
+        if target.exists()
+            && target.join(MODEL_FILE_NAME).exists()
+            && target.join(LABEL_FILE_NAME).exists()
+        {
             return Ok(());
         }
         if let Some(parent) = target.parent() {
@@ -183,6 +186,13 @@ fn bundled_models_dir() -> PathBuf {
     if let Ok(exe_path) = env::current_exe()
         && let Some(exe_dir) = exe_path.parent()
     {
+        #[cfg(target_os = "macos")]
+        if let Some(contents_dir) = exe_dir.parent() {
+            let resources_dir = contents_dir.join("Resources");
+            if resources_dir.exists() {
+                return resources_dir.join("models");
+            }
+        }
         let exe_models = exe_dir.join("models");
         if exe_models.exists() {
             return exe_models;
@@ -210,7 +220,6 @@ fn bundled_models_dir() -> PathBuf {
             return cwd_models;
         }
     }
-
     PathBuf::from("models")
 }
 
@@ -306,6 +315,9 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> anyhow::Result<()> {
         if ty.is_dir() {
             copy_dir_recursive(&entry.path(), &dest_path)?;
         } else if ty.is_file() {
+            if dest_path.exists() {
+                continue;
+            }
             fs::copy(entry.path(), &dest_path).with_context(|| {
                 format!(
                     "Kopi\u{00EB}ren van {} naar {} mislukt",
