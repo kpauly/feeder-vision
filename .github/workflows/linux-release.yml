@@ -1,0 +1,88 @@
+name: Linux AppImage Build
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-20.04
+    env:
+      CARGO_TERM_COLOR: always
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME:-0.0.0-dev}"
+          if [[ -z "$version" ]]; then
+            version="0.0.0-dev"
+          fi
+          if [[ "$version" == v* ]]; then
+            version="${version:1}"
+          fi
+          if [[ -z "$version" ]]; then
+            version="0.0.0-dev"
+          fi
+          echo "FEEDIE_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libgtk-3-dev \
+            libx11-dev \
+            libxkbcommon-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libgl1-mesa-dev \
+            patchelf
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: linux-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release binary
+        env:
+          FEEDIE_VERSION: ${{ env.FEEDIE_VERSION }}
+          FEEDIE_ROBOFLOW_API_KEY: ${{ secrets.FEEDIE_ROBOFLOW_API_KEY }}
+        run: cargo build --release -p app_gui
+
+      - name: Download AppImage tooling
+        run: |
+          mkdir -p tools
+          curl -L -o tools/linuxdeploy.AppImage \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          curl -L -o tools/appimagetool.AppImage \
+            https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x tools/*.AppImage
+
+      - name: Build AppImage
+        env:
+          FEEDIE_VERSION: ${{ env.FEEDIE_VERSION }}
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          PATH: ${{ github.workspace }}/tools:${{ env.PATH }}
+        run: ./scripts/build_appimage.sh
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Feedie-linux-x86_64-${{ env.FEEDIE_VERSION }}
+          path: dist/Feedie-linux-x86_64-${{ env.FEEDIE_VERSION }}.AppImage

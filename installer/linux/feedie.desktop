@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Feedie
+Comment=Efficient species detection for feeder cameras
+Exec=Feedie
+Icon=feedie
+Categories=Graphics;Photography;
+Terminal=false
