@@ -222,6 +222,16 @@ fn is_supported_image(path: &Path) -> bool {
     }
 }
 
+fn strip_label_bom(label: &str) -> &str {
+    label.trim_start_matches('\u{feff}')
+}
+
+fn canonical_label_for_match(label: &str) -> String {
+    let cleaned = strip_label_bom(label).trim();
+    let cleaned = cleaned.trim_end_matches(['.', ',']).trim();
+    cleaned.to_ascii_lowercase()
+}
+
 /// Resizes an image to a fixed square using a SIMD-aware resizer.
 fn resize_to_square_rgb(raw: Vec<u8>, width: u32, height: u32, size: u32) -> Result<Vec<u8>> {
     let src = FrImage::from_vec_u8(width, height, raw, fr::PixelType::U8x3)
@@ -505,17 +515,24 @@ mod classifier {
                 fs::read_to_string(&cfg.labels_path).context("labels niet te lezen")?;
             let mut labels: Vec<String> = labels_raw
                 .lines()
-                .map(|line| {
+                .filter_map(|line| {
                     let trimmed = line.trim();
+                    if trimmed.is_empty() {
+                        return None;
+                    }
                     let primary = trimmed
                         .split_once(',')
                         .map(|(first, _)| first.trim())
                         .unwrap_or(trimmed)
                         .trim_end_matches(',')
                         .trim();
-                    primary.to_string()
+                    let display = strip_label_bom(primary).trim();
+                    if display.is_empty() {
+                        None
+                    } else {
+                        Some(display.to_string())
+                    }
                 })
-                .filter(|l| !l.is_empty())
                 .collect();
             if labels.is_empty() {
                 anyhow::bail!("labels-bestand bevat geen labels");
@@ -544,7 +561,7 @@ mod classifier {
                 background_labels: cfg
                     .background_labels
                     .iter()
-                    .map(|s| s.to_ascii_lowercase())
+                    .map(|s| canonical_label_for_match(s))
                     .collect(),
                 batch_size: cfg.batch_size.max(1),
             })
@@ -761,8 +778,11 @@ mod classifier {
                 .get(best_idx)
                 .cloned()
                 .unwrap_or_else(|| format!("class_{best_idx}"));
-            let label_lower = label.to_ascii_lowercase();
-            let is_background = self.background_labels.iter().any(|bg| bg == &label_lower);
+            let label_canonical = canonical_label_for_match(&label);
+            let is_background = self
+                .background_labels
+                .iter()
+                .any(|bg| bg == &label_canonical);
             let present = best_prob >= self.presence_threshold && !is_background;
             let decision = if is_background {
                 Decision::Unknown
