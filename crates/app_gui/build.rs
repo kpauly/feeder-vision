@@ -1,4 +1,7 @@
-use std::{env, path::PathBuf};
+use std::env;
+
+#[cfg(target_os = "windows")]
+use std::path::PathBuf;
 
 fn main() {
     // Rebuild when version or Roboflow key changes so baked-in envs stay in sync.
