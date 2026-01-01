@@ -6,7 +6,7 @@ VERSION="${FEEDIE_VERSION:-0.0.0-dev}"
 
 APPDIR="${ROOT}/dist/AppDir"
 DESKTOP_FILE="${ROOT}/installer/linux/feedie.desktop"
-ICON_SOURCE="${ROOT}/assets/Feedie_icon.png"
+ICON_SOURCE="${ROOT}/assets/Feedie_icon_256.png"
 APPIMAGE_NAME="Feedie-linux-x86_64-${VERSION}.AppImage"
 
 LINUXDEPLOY="${LINUXDEPLOY:-}"
