@@ -73,12 +73,12 @@ jobs:
           curl -L -o tools/appimagetool.AppImage \
             https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x tools/*.AppImage
+          echo "${GITHUB_WORKSPACE}/tools" >> "$GITHUB_PATH"
 
       - name: Build AppImage
         env:
           FEEDIE_VERSION: ${{ env.FEEDIE_VERSION }}
           APPIMAGE_EXTRACT_AND_RUN: "1"
-          PATH: ${{ github.workspace }}/tools:${{ env.PATH }}
         run: ./scripts/build_appimage.sh
 
       - name: Upload AppImage artifact
