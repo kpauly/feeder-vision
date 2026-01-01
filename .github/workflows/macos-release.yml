@@ -8,7 +8,17 @@ on:
 
 jobs:
   build-macos:
-    runs-on: macos-13
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            runner: macos-15
+            artifact: Feedie-mac-arm64
+          - target: x86_64-apple-darwin
+            runner: macos-15-intel
+            artifact: Feedie-mac-intel
 
     steps:
       - name: Checkout
@@ -34,8 +44,8 @@ jobs:
         with:
           components: clippy, rustfmt
 
-      - name: Add macOS targets
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Add macOS target
+        run: rustup target add ${{ matrix.target }}
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -48,43 +58,26 @@ jobs:
       - name: Run CI checks
         run: pwsh ./scripts/ci.ps1
 
-      - name: Build release binaries
+      - name: Build release binary
         env:
           FEEDIE_VERSION: ${{ env.FEEDIE_VERSION }}
           FEEDIE_ROBOFLOW_API_KEY: ${{ secrets.FEEDIE_ROBOFLOW_API_KEY }}
-        run: |
-          cargo build --release --target aarch64-apple-darwin -p app_gui
-          cargo build --release --target x86_64-apple-darwin -p app_gui
+        run: cargo build --release --target ${{ matrix.target }} -p app_gui
 
       - name: Install cargo-bundle
         run: cargo install cargo-bundle --locked
 
-      - name: Bundle Feedie.app (arm64)
+      - name: Bundle Feedie.app
         env:
           FEEDIE_VERSION: ${{ env.FEEDIE_VERSION }}
         run: |
-          cargo bundle --release --target aarch64-apple-darwin -p app_gui
-          cd target/aarch64-apple-darwin/release/bundle/osx
-          ditto -c -k --keepParent Feedie.app Feedie-mac-arm64.zip
-          mv Feedie-mac-arm64.zip Feedie-mac-arm64-${FEEDIE_VERSION}.zip
+          cargo bundle --release --target ${{ matrix.target }} -p app_gui
+          cd target/${{ matrix.target }}/release/bundle/osx
+          zip_name="${{ matrix.artifact }}-${FEEDIE_VERSION}.zip"
+          ditto -c -k --keepParent Feedie.app "$zip_name"
 
-      - name: Bundle Feedie.app (x86_64)
-        env:
-          FEEDIE_VERSION: ${{ env.FEEDIE_VERSION }}
-        run: |
-          cargo bundle --release --target x86_64-apple-darwin -p app_gui
-          cd target/x86_64-apple-darwin/release/bundle/osx
-          ditto -c -k --keepParent Feedie.app Feedie-mac-intel.zip
-          mv Feedie-mac-intel.zip Feedie-mac-intel-${FEEDIE_VERSION}.zip
-
-      - name: Upload Apple Silicon artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Feedie-mac-arm64-${{ env.FEEDIE_VERSION }}
-          path: target/aarch64-apple-darwin/release/bundle/osx/Feedie-mac-arm64-${{ env.FEEDIE_VERSION }}.zip
-
-      - name: Upload Intel artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Feedie-mac-intel-${{ env.FEEDIE_VERSION }}
-          path: target/x86_64-apple-darwin/release/bundle/osx/Feedie-mac-intel-${{ env.FEEDIE_VERSION }}.zip
+          name: ${{ matrix.artifact }}-${{ env.FEEDIE_VERSION }}
+          path: target/${{ matrix.target }}/release/bundle/osx/${{ matrix.artifact }}-${{ env.FEEDIE_VERSION }}.zip
