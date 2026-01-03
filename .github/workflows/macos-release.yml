@@ -75,7 +75,7 @@ jobs:
         run: |
           cargo bundle --release --target ${{ matrix.target }} -p app_gui --bin Feedie
           bundle_dir="target/${{ matrix.target }}/release/bundle/osx"
-          app_path="$(ls "$bundle_dir"/*.app | head -n 1)"
+          app_path="$(ls -d "$bundle_dir"/*.app 2>/dev/null | head -n 1 || true)"
           if [[ -z "$app_path" ]]; then
             echo "No .app bundle found in $bundle_dir"
             exit 1
