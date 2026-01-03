@@ -45,17 +45,23 @@ fn apply_crostini_x11_workaround() {
     if !is_crostini() {
         return;
     }
-    if env::var_os("WINIT_UNIX_BACKEND").is_none() {
-        // SAFETY: set before any threads spawn or libraries read env vars.
-        unsafe {
-            env::set_var("WINIT_UNIX_BACKEND", "x11");
-        }
+
+    // SAFETY: set before any threads spawn or libraries read env vars.
+    unsafe {
+        set_env_if_missing("WINIT_UNIX_BACKEND", "x11");
+        set_env_if_missing("GDK_BACKEND", "x11");
+        set_env_if_missing("SOMMELIER_SCALE", "1");
+        set_env_if_missing("GDK_SCALE", "1");
+        set_env_if_missing("GDK_DPI_SCALE", "1");
+        set_env_if_missing("WGPU_BACKEND", "gl");
+        set_env_if_missing("LIBGL_ALWAYS_SOFTWARE", "1");
     }
-    if env::var_os("GDK_BACKEND").is_none() {
-        // SAFETY: set before any threads spawn or libraries read env vars.
-        unsafe {
-            env::set_var("GDK_BACKEND", "x11");
-        }
+}
+
+#[cfg(target_os = "linux")]
+unsafe fn set_env_if_missing(key: &str, value: &str) {
+    if env::var_os(key).is_none() {
+        env::set_var(key, value);
     }
 }
 
