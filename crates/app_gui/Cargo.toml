@@ -56,7 +56,6 @@ rstest = "0.26.1"
 name = "Feedie"
 identifier = "nl.feedie.app"
 version = "1.2.0"
-bin = "Feedie"
 short_description = "Efficiënte triage voor voederhuiscamera's"
 copyright = "Copyright (c) 2025 Klaas"
 resources = [
