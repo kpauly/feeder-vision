@@ -42,27 +42,31 @@ fn is_crostini() -> bool {
 
 #[cfg(target_os = "linux")]
 fn apply_crostini_x11_workaround() {
-    if !is_crostini() {
+    if !is_crostini() || env::var_os("FEEDIE_CROSTINI_DISABLE_X11").is_some() {
         return;
     }
 
     // SAFETY: set before any threads spawn or libraries read env vars.
     unsafe {
-        set_env_if_missing("WINIT_UNIX_BACKEND", "x11");
-        set_env_if_missing("GDK_BACKEND", "x11");
-        set_env_if_missing("SOMMELIER_SCALE", "1");
-        set_env_if_missing("GDK_SCALE", "1");
-        set_env_if_missing("GDK_DPI_SCALE", "1");
-        set_env_if_missing("WGPU_BACKEND", "gl");
-        set_env_if_missing("LIBGL_ALWAYS_SOFTWARE", "1");
+        env::remove_var("WAYLAND_DISPLAY");
+        env::remove_var("XDG_SESSION_TYPE");
+        force_env("WINIT_UNIX_BACKEND", "x11");
+        force_env("GDK_BACKEND", "x11");
+        force_env("SOMMELIER_SCALE", "1");
+        force_env("GDK_SCALE", "1");
+        force_env("GDK_DPI_SCALE", "1");
+        force_env("WGPU_BACKEND", "gl");
+        force_env("LIBGL_ALWAYS_SOFTWARE", "1");
+    }
+
+    if env::var_os("FEEDIE_CROSTINI_DEBUG").is_some() {
+        eprintln!("Feedie: Crostini detected; forcing X11 backend.");
     }
 }
 
 #[cfg(target_os = "linux")]
-unsafe fn set_env_if_missing(key: &str, value: &str) {
-    if env::var_os(key).is_none() {
-        env::set_var(key, value);
-    }
+unsafe fn force_env(key: &str, value: &str) {
+    env::set_var(key, value);
 }
 
 /// Bootstraps the egui application and installs tracing and the window icon.
