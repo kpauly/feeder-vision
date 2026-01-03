@@ -90,6 +90,7 @@ Chromebook (ARM64) quick start:
 3. Install runtime libs: `sudo apt install -y libgtk-3-0 libx11-6 libxkbcommon0 libxrandr2 libxinerama1 libxcursor1 libxi6 libgl1`
 4. Copy the AppImage from Downloads: `cp /mnt/chromeos/MyFiles/Downloads/Feedie-linux-aarch64-<version>.AppImage ~/`
 5. Run it: `chmod +x ~/Feedie-linux-aarch64-<version>.AppImage && ~/Feedie-linux-aarch64-<version>.AppImage`
+If the UI feels offset or clicks land in the wrong place, run once with `WINIT_UNIX_BACKEND=x11 GDK_BACKEND=x11` to force X11.
 
 > Prefer a portable build? Run `cargo build --release -p app_gui` and start `target\release\Feedie.exe`.
 

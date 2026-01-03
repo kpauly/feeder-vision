@@ -16,10 +16,37 @@ use egui::viewport::ViewportBuilder;
 use std::sync::Arc;
 use util::load_app_icon;
 
+#[cfg(target_os = "linux")]
+use std::{env, path::Path};
+
+#[cfg(target_os = "linux")]
+fn is_crostini() -> bool {
+    env::var_os("CROS_USER_ID_HASH").is_some()
+        || env::var_os("SOMMELIER_VERSION").is_some()
+        || env::var_os("SOMMELIER_SCALE").is_some()
+        || Path::new("/dev/.cros_milestone").exists()
+}
+
+#[cfg(target_os = "linux")]
+fn apply_crostini_x11_workaround() {
+    if !is_crostini() {
+        return;
+    }
+    if env::var_os("WINIT_UNIX_BACKEND").is_none() {
+        env::set_var("WINIT_UNIX_BACKEND", "x11");
+    }
+    if env::var_os("GDK_BACKEND").is_none() {
+        env::set_var("GDK_BACKEND", "x11");
+    }
+}
+
 /// Bootstraps the egui application and installs tracing and the window icon.
 fn main() {
     #[cfg(debug_assertions)]
     tracing_subscriber::fmt::init();
+
+    #[cfg(target_os = "linux")]
+    apply_crostini_x11_workaround();
 
     let options = NativeOptions {
         viewport: ViewportBuilder::default().with_icon(Arc::new(load_app_icon())),
