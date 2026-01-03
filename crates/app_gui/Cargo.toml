@@ -65,3 +65,17 @@ resources = [
 ]
 icon = ["assets/Feedie.icns"]
 category = "public.app-category.photography"
+
+[package.metadata.bundle.bin.Feedie]
+name = "Feedie"
+identifier = "nl.feedie.app"
+version = "1.2.0"
+short_description = "EfficiǮnte triage voor voederhuiscamera's"
+copyright = "Copyright (c) 2025 Klaas"
+resources = [
+    "models",
+    "manifest.json",
+    "assets/Feedie-banner.png",
+]
+icon = ["assets/Feedie.icns"]
+category = "public.app-category.photography"
