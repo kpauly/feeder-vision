@@ -40,9 +40,11 @@ if [[ -z "${APPIMAGETOOL}" ]]; then
   fi
 fi
 
-if [[ -n "${APPIMAGETOOL}" ]]; then
-  export APPIMAGETOOL
+if [[ -z "${APPIMAGETOOL}" ]]; then
+  echo "appimagetool not found. Set APPIMAGETOOL or add it to PATH." >&2
+  exit 1
 fi
+export APPIMAGETOOL
 
 rm -rf "${APPDIR}"
 mkdir -p "${APPDIR}/usr/bin"
@@ -58,8 +60,21 @@ cp "${ICON_SOURCE}" "${APPDIR}/usr/share/icons/hicolor/256x256/apps/feedie.png"
 "${LINUXDEPLOY}" \
   --appdir "${APPDIR}" \
   --desktop-file "${APPDIR}/usr/share/applications/feedie.desktop" \
-  --icon-file "${APPDIR}/usr/share/icons/hicolor/256x256/apps/feedie.png" \
-  --output appimage
+  --icon-file "${APPDIR}/usr/share/icons/hicolor/256x256/apps/feedie.png"
+
+# Use the system libxkbcommon to avoid mismatches with host X11 compose data.
+if [[ -d "${APPDIR}/usr/lib" ]]; then
+  find "${APPDIR}/usr/lib" -type f -name 'libxkbcommon*.so*' -delete
+fi
+if [[ -d "${APPDIR}/usr/lib64" ]]; then
+  find "${APPDIR}/usr/lib64" -type f -name 'libxkbcommon*.so*' -delete
+fi
+
+export ARCH
+export VERSION
+pushd "${ROOT}" >/dev/null
+"${APPIMAGETOOL}" "${APPDIR}"
+popd >/dev/null
 
 OUTPUT="$(ls -1 "${ROOT}"/*.AppImage 2>/dev/null | head -n 1 || true)"
 if [[ -z "${OUTPUT}" ]]; then

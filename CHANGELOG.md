@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] - Unreleased
+
+### Fixed
+- Linux AppImage avoids bundling libxkbcommon to prevent keyboard input crashes on newer distros (issue #4).
+
 ## [1.3.0] - 2026-01-04
 
 ### Added
